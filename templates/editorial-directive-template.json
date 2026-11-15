@@ -10,11 +10,17 @@
  },
  "source": {
   "path": "/absolute/path/to/source.mp4",
+  "kind": "video",
+  "duration_s": 60.0
+ },
+ "timeline": {
   "duration_s": 60.0
  },
  "approval": {
   "status": "pending",
-  "ambiguities": []
+  "ambiguities": [],
+  "approved_by": "",
+  "approved_at": ""
  },
  "protected_regions": [
   {
@@ -50,8 +56,10 @@
    ],
    "transition_in": "spring-pop",
    "transition_out": "fade-up",
+   "entrance_s": 0.35,
+   "exit_s": 0.25,
    "rationale": "Hook needs text plus presenter"
   }
  ],
- "notes": "Draft template: validate with --draft while designing. Before rendering, set approval.status to approved, point source.path at the real media file, and run the validator without --draft. transition_in and transition_out must use tokens from the fixed set in references/workflow-and-directive.md."
+ "notes": "Draft template: validate with --draft while designing. Before rendering, set approval.status to approved with approved_by and approved_at filled, point source.path at the real media file, and run the validator without --draft. source.kind is video, audio or none; for kind none, delete the source object and keep timeline.duration_s. transition_in and transition_out must use tokens from the fixed set in references/workflow-and-directive.md."
 }

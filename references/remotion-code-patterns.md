@@ -40,7 +40,14 @@ Pitfalls:
 - A one character pixel format error such as yuv444p10le instead of yuva444p10le produces a file that looks fine on black and composites as a black box.
 - ProRes 4444 is large at roughly 5 MB per second for a sparse caption overlay and 15 MB per second for a full phone overlay in one production report, so budget storage and transfer.
 
-Proven lesson from the Agent Video Editor test on 2026-11-15 in this workspace is that Remotion 4.0.543 direct video renders in prores and vp9 silently dropped alpha despite PNG image format. The working route was a PNG sequence with the sequence flag, then ffmpeg prores_ks 4444 with yuva444p12le, verified frame by frame. The two pixel formats in this file are not a contradiction: yuva444p10le is the standard for the Remotion ProRes route, while yuva444p12le is what the ffmpeg prores_ks encoder route produced and verified locally. State which encoder route a deliverable used when reporting its pixel format. Use the PNG sequence route as the default safe route in Muse Motion, then verify the alpha plane on the final file.
+Proven lesson from the Agent Video Editor test on 2026-11-15 in this workspace is that Remotion 4.0.543 direct video renders in prores and vp9 silently dropped alpha despite PNG image format. The working route was a PNG sequence with the sequence flag, then ffmpeg prores_ks 4444, verified frame by frame. Pixel-format reporting needs care (corrected v1.2): the ffmpeg ProRes decoder reports 4444 streams as yuva444p12le regardless of whether the encoder was fed yuva444p10le or yuva444p12le, because ProRes 4444 stores 12-bit components. So an ffprobe reading of yuva444p12le does not tell you which input format the encoder used, and a QC expectation of the exact string yuva444p10le will always fail. State which encoder route a deliverable used when reporting, and never spec an exact yuva444p10le probe result. Use the PNG sequence route as the default safe route in Muse Motion, then verify the alpha plane on the final file.
+
+Alpha route commands (v1.2 - these were described but never written down):
+ProRes 4444 master from a PNG sequence:
+ffmpeg -framerate 30 -i frames/frame_%04d.png -c:v prores_ks -profile:v 4444 -pix_fmt yuva444p10le -vendor apl0 out.mov
+VP9 alpha WebM for browsers from a PNG sequence:
+ffmpeg -framerate 30 -i frames/frame_%04d.png -c:v libvpx-vp9 -pix_fmt yuva420p -b:v 0 -crf 18 -auto-alt-ref 0 out.webm
+Verify either output with scripts/qc_probe.py and a spec with overlay.alpha_required true; note ffprobe shows VP9 alpha files as yuv420p with TAG alpha_mode=1, which the QC gate accepts.
 
 PNG sequence is the most portable workflow. Render the sequence to numbered PNG frames, QC individual frames, composite in ffmpeg or hand the sequence to any editor, and re render only the fixed frames after a local defect.
 
@@ -61,6 +68,6 @@ export const BeatCard: React.FC<{title: string}> = ({title}) => {
     easing: Easing.bezier(0.16, 1, 0.3, 1),
   });
   const scale = spring({frame, fps, config: {damping: 20, stiffness: 200, mass: 0.8}});
-  return <div style={{opacity, transform: `scale(${scale})`}}>{title}</div>;
+  return <div style={{opacity, scale: String(scale)}}>{title}</div>;
 };
 ```

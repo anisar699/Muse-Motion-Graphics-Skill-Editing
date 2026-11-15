@@ -1,0 +1,7 @@
+# Muse Motion runtime requirements (reference versions used for v1.2 testing)
+# System tools (install via your OS package manager):
+#   ffmpeg >= 6.1 (ffprobe required on PATH; libvpx-vp9 needed for VP9 alpha decode checks)
+#   Node.js >= 18 and Remotion 4.0.543 (only for Remotion builds)
+# Python packages:
+Pillow>=10.0
+faster-whisper>=1.0

@@ -27,3 +27,7 @@
 - Element families needed from the taxonomy playbook:
 - Styleframe references:
 - Deadline:
+
+## Protected regions and overrides
+- Protected regions (faces, captions band, logos) with rects:
+- Any deliberate protected-region overlap, with the reason (the same reason goes into the beat's overlap_reason field in the directive):

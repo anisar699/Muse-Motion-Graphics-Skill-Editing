@@ -4,6 +4,15 @@ Research run on 15 Nov 2026 for Muse Motion. The full research report is kept in
 
 ## Official and primary sources
 
+Canonical links (added v1.2):
+- EBU R 128 loudness recommendation: tech.ebu.ch/publications/r128
+- ITU-R BS.1770 loudness measurement: itu.int/rec/R-REC-BS.1770
+- WCAG 2.2 (captions 1.2.2, contrast 1.4.3, flashing 2.3.1): w3.org/TR/WCAG22
+- YouTube recommended upload encoding settings: support.google.com/youtube/answer/1722171
+- Remotion documentation: remotion.dev/docs
+
+## Official and primary sources (research notes)
+
 - Remotion rendering transparent videos, read live at remotion.dev/docs/transparent-videos
 - Remotion flickering and determinism, read live at remotion.dev/docs/flickering
 - Remotion interactivity best practices at remotion.dev/docs/studio/interactivity-best-practices

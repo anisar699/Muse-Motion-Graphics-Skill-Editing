@@ -5,7 +5,7 @@ description: Professional motion graphics video editing for user-supplied videos
 
 # Muse Motion
 
-Version 1.1 (2026-11-15). Changes from 1.0 are listed in CHANGELOG.md.
+Version 1.2 (2026-11-15). Changes from 1.0 are listed in CHANGELOG.md.
 
 ## Purpose and route selection
 
@@ -13,7 +13,7 @@ Version 1.1 (2026-11-15). Changes from 1.0 are listed in CHANGELOG.md.
 
 - Work as Muse itself with the local code stack of Remotion, ffmpeg, and Python. Do not require Codex, OpenAI, or an After Effects GUI unless the user explicitly orders a different route.
 
-- Route the job by duration and format before building. Short presenter intros and hooks use the fast intro route, long tutorials and explainers use the long form route, vertical clips use the short form route, and pure graphics pieces use the graphics only route.
+- Route the job by duration and format before building (routes defined in references/workflow-and-directive.md). Fast intro: a title or bumper of at most 15s, usually graphics-only. Short form: at most 90s vertical or square social video. Long form: over 90s, footage-led. Graphics only: no camera footage - lyric videos, logo animation, stills-and-type explainers; the directive source is kind "audio" or kind "none" with timeline.duration_s.
 
 - Never modify the original media. Copy source files into the project folder, keep originals untouched, and write every output under the project edit folder.
 
@@ -27,7 +27,7 @@ Version 1.1 (2026-11-15). Changes from 1.0 are listed in CHANGELOG.md.
 
 - Group words into complete semantic beats. Mark each beat role with exactly one of the validator role tokens, all lowercase: hook, context, problem, promise, reveal, definition, process, proof, reassurance, transition, cta.
 
-- Write the director treatment and the editorial directive JSON before any graphics. Validation is two-stage: run scripts/validate_directive.py with --draft while designing (schema gate only, a draft PASS is never render permission), and run it without --draft before rendering (render-ready gate: approval.status must be approved with zero ambiguities, the source media must exist and probe with a matching duration, layouts must sit inside the canvas, protected regions are collision-checked at a 50 percent overlap limit, roles, treatments and transition tokens must come from the fixed sets in references/workflow-and-directive.md, and reveal_sync elements must be declared in on_screen_copy). Any INVALID result stops the render.
+- Write the director treatment and the editorial directive JSON before any graphics. Validation is two-stage: run scripts/validate_directive.py with --draft while designing (schema gate only, a draft PASS is never render permission), and run it without --draft before rendering (render-ready gate: approval.status must be approved with zero ambiguities, the source media must exist and probe with a matching duration, layouts must sit inside the canvas, protected regions are collision-checked (fail at 10 percent of the region, 50 percent of the layout, or any overlap of a critical region; overrides need the boolean true plus an overlap_reason and are always reported), roles, treatments and transition tokens must come from the fixed sets in references/workflow-and-directive.md, and reveal_sync elements must be declared in on_screen_copy). Any INVALID result stops the render.
 
 - Build styleframes before animation. Render one finished still each for the title, a typical scene, a data scene, the lower third, and the end card, and lock fonts, colours, spacing, safe areas, and motion tokens from those frames.
 
@@ -127,7 +127,7 @@ Version 1.1 (2026-11-15). Changes from 1.0 are listed in CHANGELOG.md.
 
 - Check captions by ear and eye. Confirm names, numbers, and low confidence words, keep standard captions at or below 42 characters per line and 2 lines, and keep reading speed at or below 20 characters per second for adults.
 
-- Measure loudness and true peak on the final encoded file, not on the project. Run scripts/qc_probe.py on the final file with a per-deliverable --spec file and save the --report JSON: it enforces audio presence (missing audio fails as AUDIO_STREAM_MISSING, digital silence fails as AUDIO_SILENT), loudness target and tolerance, true peak ceiling, dimensions, frame rate, codec, duration, alpha pixel format when required, and front placed moov atom for MP4, and it exits nonzero on any failure. Use scripts/sample_frames.py to extract hook, quarter, hero, three-quarter and end frames plus a contact sheet for the human visual check.
+- Measure loudness and true peak on the final encoded file, not on the project. Run scripts/qc_probe.py on the final file with a per-deliverable --spec file and save the --report JSON: it enforces audio presence (missing audio fails as AUDIO_STREAM_MISSING, digital silence fails as AUDIO_SILENT), loudness target and tolerance, true peak ceiling, dimensions, frame rate (0.01 tolerance, VFR detected), codec, pixel format, profile, colour tags, duration, alpha when required (format AND decoded content - a constant-opaque alpha fails), and front placed moov atom for MP4/MOV, and it exits nonzero on any failure; spec keys are whitelisted, and starter specs live in templates/. Use scripts/sample_frames.py to extract hook, quarter, hero, three-quarter and end frames plus a contact sheet for the human visual check (with --directive it also samples every beat start, reveal and end).
 
 - Apply the accessibility hard limits. Keep contrast at or above 4.5 to 1 for normal text and 3 to 1 for large text, and never flash more than 3 times in any 1 second period.
 
