@@ -1,11 +1,11 @@
 ---
 name: muse-motion
-description: Professional motion graphics video editing for user-supplied videos. Use for kinetic typography, titles, lower thirds, animated captions, callouts, logo animation, transitions, data visualisation, UI mockups, social formats, explainer and whiteboard elements, 2.5D parallax, 3D basics, character basics, product promos, lyric videos, intros, outros and CTAs, with a directive-first Remotion, ffmpeg and Python workflow.
+description: Professional motion graphics video editing for user-supplied videos - kinetic typography, titles, lower thirds, animated captions, callouts, transitions, data visualisation and social formats, with a directive-first Remotion, ffmpeg and Python workflow. Use when the user asks to edit a video with motion graphics, animated text or burned captions.
 ---
 
 # Muse Motion
 
-Version 1.6 (2026-11-15). Changes from 1.0 are listed in CHANGELOG.md.
+Version 1.7 (2026-11-15). Changes from 1.0 are listed in CHANGELOG.md.
 
 ## Purpose and route selection
 
@@ -21,9 +21,9 @@ Version 1.6 (2026-11-15). Changes from 1.0 are listed in CHANGELOG.md.
 
 ## Fast professional workflow
 
-- Start with intake. Probe every source with ffprobe, record width, height, exact frame rate, duration, codec, colour, and audio sample rate, and list the deliverables, platforms, aspects, caption needs, and deadline in the brief template. If the colour tags are not BT.709 SDR, resolve the source through the non-BT.709 route in references/ffmpeg-and-audio.md (convert BT.2020 SDR pixels, or stop and report PQ/HLG as unsupported) before designing anything; never relabel tags without converting pixels.
+- Start with intake. Probe every source with ffprobe, record width, height, exact frame rate, duration, codec, colour, and audio sample rate, and list the deliverables, platforms, aspects, caption needs, and deadline in the brief template. If the colour tags are not BT.709 SDR, resolve the source through the non-BT.709 route in references/ffmpeg-and-audio.md (convert BT.2020 SDR pixels; stop and report PQ/HLG as unsupported; untagged sources are treated as BT.709 with the assumption recorded in the brief and the tags completed on encode) before designing anything; never relabel tags that contradict the pixels.
 
-- Transcribe locally before designing anything. Extract 16 kHz mono audio with ffmpeg, run faster-whisper with word timestamps, cache the transcript JSON, and flag every word with probability below 0.80 for a human check of names and numbers.
+- Transcribe locally before designing anything. Extract 16 kHz mono audio with ffmpeg and run scripts/transcribe.py (faster-whisper with word timestamps); the transcript JSON it writes is the cache every later step reads, and the tool lists every word with probability below 0.80 in its low_probability_words for a human check of names and numbers.
 
 - Group words into complete semantic beats. Mark each beat role with exactly one of the validator role tokens, all lowercase: hook, context, problem, promise, reveal, definition, process, proof, reassurance, transition, cta.
 
@@ -123,11 +123,13 @@ Version 1.6 (2026-11-15). Changes from 1.0 are listed in CHANGELOG.md.
 
 - House styles are locked (owner decision 2026-11-15): English and Roman Urdu use the `skill-bar` (charcoal bar, white bold text, amber underline); Urdu script uses the `nastaliq-bar` (same bar, bundled Noto Nastaliq Urdu, RTL). Both bars include word-by-word highlighting: the word being spoken turns amber inside the bar (one PNG state per word). A directive declares captions in its `captions` block (mode none|sidecar|burned|both, language en|ur|roman, style, highlight word|none, source = the captions.json to burn); deviating from the house style warns, and burned mode at the approval gate requires an existing captions source.
 
-- Build captions with scripts/build_captions.py from a word-timestamped transcript (scripts/transcribe.py output). It writes captions.json, captions.srt, and an ffmpeg concat overlay layer (layer.ffconcat) that is overlaid on the source exactly like a graphics layer, so captions can never collide with protected regions by accident and stay in sync with the directive's canvas. Cue timing is reading-time based (block-proportional tiling at <=20 cps); cues that genuinely cannot fit because the speech itself is faster are declared as over-speed bursts in captions.json, never silently hidden.
+- Build captions with scripts/build_captions.py from a word-timestamped transcript (scripts/transcribe.py output). It writes captions.json, captions.srt, and an ffmpeg concat overlay layer (layer.ffconcat) that is overlaid on the source exactly like a graphics layer and stays in sync with the directive's canvas. The caption bar occupies the bottom caption band by design, so caption safety comes from placement discipline, not from the layer mechanism: keep the band clear in the directive (no graphics beats parked in it - the PLACEMENT rule below) and treat any protected region that reaches into the band as a design conflict to resolve before rendering. Cue timing is ANCHORED to the speech (v1.7): a cue never starts more than 0.3s before its first word and never ends before its last word; reading-speed extensions and any cue clamped at the timeline end are declared in captions.json, and cues that genuinely cannot fit because the speech itself is faster are declared as over-speed bursts, never silently hidden.
 
 - Cue grouping repairs broken phrases before tiling (v1.6, owner audit 2026-11-15): a short trailing word that completes a phrase is swallowed into its cue instead of split off ("night side"), one-word tail cues are merged into the previous cue instead of flashing ("routine."), a cue never ends on a function word when the phrase continues ("A city in / space."), and two-line cues are length-balanced. A new sentence's first word is never swallowed across a sentence end. Rendered lines respect the per-line character cap as well as the measured width.
 
 - Heading and fact cards sit in the top zone when captions are burned (caption-zone placement rule - see references/workflow-and-directive.md); the validator warns PLACEMENT when a card layout enters the bottom 26 percent of the frame.
+
+- Portrait caption placement clears the platform UI band (v1.7): the engine's default bottom margin at 1080x1920 is 460px, above the TikTok bottom band (~350-440px) in references/platform-retention-accessibility.md; for Reels deliverables, whose ads guide excludes the bottom ~35%, pass --bottom-margin (about 700 at 1080x1920) explicitly.
 
 - Language honesty is enforced by the tool: an English transcript yields English captions; an Urdu transcript yields Urdu script and Roman Urdu (transliterated via references/roman-urdu-dictionary.json, with the dictionary coverage percentage reported - extend the dictionary when coverage drops). English-to-Urdu or English-to-Roman is translation, not transcription: the tool refuses it unless a human supplies or approves the translated text.
 

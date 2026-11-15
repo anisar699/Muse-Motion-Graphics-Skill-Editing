@@ -15,7 +15,12 @@ Usage:
                       [--language en] [--device cpu] [--compute int8]
 
 Output JSON: {"language": ..., "segments": [{"start", "end", "text",
-"words": [{"word", "start", "end", "probability"}]}]}
+"words": [{"word", "start", "end", "probability"}]}],
+"low_probability_words": [...]} - words below 0.80 probability are listed
+for the human check of names and numbers the workflow requires.
+Default output is "<media-stem>.transcript.json" in the CURRENT directory
+(v1.7, audit M-07: v1.3 wrote into the source folder, polluting - or
+failing on - media libraries the user never asked to write into).
 Exit codes: 0 ok, 2 tool error (missing file/ffmpeg/faster-whisper).
 """
 import argparse
@@ -49,14 +54,18 @@ def main():
               "install the skill's requirements.txt", file=sys.stderr)
         sys.exit(2)
 
-    out_path = Path(args.out) if args.out else src.with_name("transcript.json")
+    out_path = Path(args.out) if args.out else Path.cwd() / f"{src.stem}.transcript.json"
 
     with tempfile.TemporaryDirectory() as td:
         wav = Path(td) / "audio16k.wav"
-        r = subprocess.run(
-            ["ffmpeg", "-nostdin", "-y", "-v", "error", "-i", str(src),
-             "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(wav)],
-            capture_output=True, text=True)
+        try:
+            r = subprocess.run(
+                ["ffmpeg", "-nostdin", "-y", "-v", "error", "-i", str(src),
+                 "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(wav)],
+                capture_output=True, text=True)
+        except FileNotFoundError:
+            print("transcribe: ERROR ffmpeg is not available on PATH", file=sys.stderr)
+            sys.exit(2)
         if r.returncode != 0:
             print(f"transcribe: ERROR ffmpeg decode failed: {r.stderr[-500:]}",
                   file=sys.stderr)
@@ -65,21 +74,33 @@ def main():
             pcm = (np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16)
                    .astype(np.float32) / 32768.0)
 
-    model = WhisperModel(args.model, device=args.device, compute_type=args.compute)
-    segments, info = model.transcribe(pcm, language=args.language,
-                                      word_timestamps=True)
-    out = {"language": info.language, "segments": []}
-    for s in segments:
-        out["segments"].append({
-            "start": round(s.start, 3), "end": round(s.end, 3),
-            "text": s.text.strip(),
-            "words": [{"word": w.word, "start": round(w.start, 3),
-                       "end": round(w.end, 3),
-                       "probability": round(w.probability, 3)}
-                      for w in (s.words or [])]})
+    try:
+        model = WhisperModel(args.model, device=args.device, compute_type=args.compute)
+        segments, info = model.transcribe(pcm, language=args.language,
+                                          word_timestamps=True)
+        out = {"language": info.language, "segments": []}
+        low_prob = []
+        for s in segments:
+            seg_words = [{"word": w.word, "start": round(w.start, 3),
+                          "end": round(w.end, 3),
+                          "probability": round(w.probability, 3)}
+                         for w in (s.words or [])]
+            for w in seg_words:
+                if w["probability"] < 0.80:
+                    low_prob.append(w)
+            out["segments"].append({
+                "start": round(s.start, 3), "end": round(s.end, 3),
+                "text": s.text.strip(), "words": seg_words})
+    except Exception as e:
+        print(f"transcribe: ERROR transcription failed: {e}", file=sys.stderr)
+        sys.exit(2)
+    out["low_probability_words"] = low_prob
     out_path.write_text(json.dumps(out, indent=1))
     print(f"transcribe: {len(out['segments'])} segments, "
           f"language={out['language']} -> {out_path}")
+    if low_prob:
+        print(f"transcribe: {len(low_prob)} word(s) below 0.80 probability - "
+              "human check of names and numbers required (listed in the JSON)")
 
 
 if __name__ == "__main__":

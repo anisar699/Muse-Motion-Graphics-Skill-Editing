@@ -9,6 +9,10 @@ Contents: SKILL.md is the main workflow. The references folder holds the researc
 Built 2026-11-15 from a dedicated research report plus the proven Agent Video Editor workflow already tested in this workspace, including the PNG sequence alpha lesson.
 
 
+## Version 1.7 (2026-11-15)
+
+See CHANGELOG.md for the full fix list from the fourth independent developer audit, of v1.5 (verified item by item against v1.6 before fixing). The package ships its own regression suite (tests/test_muse_motion_regression.py, 81 cases, all passing on v1.7), and the v1.0 auditors' 18-case suite still passes 18 of 18. Headline fixes: caption timing is anchored to the speech (a cue can no longer appear seconds before its words), the frame sampler only ever deletes files its own manifest recorded, peak_guard preserves every stream, and the colour route covers untagged sources.
+
 ## Version 1.2 (2026-11-15)
 
 See CHANGELOG.md for the full fix list from the third independent developer audit, of v1.1. The package now ships its own regression suite (tests/test_muse_motion_regression.py, 28 cases, all passing on v1.2), and the v1.0 auditors' 18-case suite still passes 18 of 18.

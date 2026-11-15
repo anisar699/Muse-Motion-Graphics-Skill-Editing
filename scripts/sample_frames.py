@@ -11,6 +11,9 @@ Without a directive it samples hook, quarter, hero (midpoint), three-quarter
 and end positions. With --directive it also samples every beat start, every
 reveal_sync time and every beat end from the directive.
 Alpha frames are composited onto a checkerboard instead of black.
+Re-runs in the same folder remove ONLY the files the previous run recorded
+in its frames_manifest.json (v1.7, audit N-01) - foreign files, including a
+render's frame_%04d.png sequence, are never touched.
 Exit codes: 0 frames extracted, 1 extraction failed / no frames, 2 tool error
 (bad input, ffprobe/ffmpeg/Pillow unavailable).
 Requires: ffmpeg, ffprobe, Pillow (see requirements.txt).
@@ -94,10 +97,26 @@ def main(argv):
             print(f"TOOL ERROR: could not read directive: {exc}")
             return 2
     out.mkdir(parents=True, exist_ok=True)
-    # Stale-file protection (v1.5, F0-4): frames or sheets from an earlier
-    # run in this folder must never survive into a review of this run.
-    for stale in list(out.glob("frame_*.png")) + list(out.glob("contact_sheet*.png")):
-        stale.unlink()
+    # Stale-file protection (v1.5, F0-4; scoped in v1.7, audit N-01):
+    # remove ONLY the files a previous run of THIS tool recorded in its
+    # frames_manifest.json in this folder. Foreign files - including a
+    # render's frame_%04d.png sequence the overlay workflow reads - are
+    # never touched: the v1.5 version deleted every frame_*.png in the
+    # folder and could destroy a render output folder.
+    manifest_path = out / "frames_manifest.json"
+    if manifest_path.is_file():
+        try:
+            old = json.loads(manifest_path.read_text(encoding="utf-8"))
+            listed = [f.get("file") for f in old.get("frames") or []]
+            listed += [old.get("contact_sheet")] + list(old.get("contact_sheets") or [])
+            for lp in listed:
+                if not lp:
+                    continue
+                p = pathlib.Path(lp)
+                if p.parent == out and p.is_file():
+                    p.unlink()
+        except Exception:
+            pass  # an unreadable old manifest deletes nothing
     frames = []
     for name, t in points.items():
         safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)[:60]

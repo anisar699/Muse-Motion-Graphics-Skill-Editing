@@ -161,16 +161,21 @@ def bit_depth_of(vs):
     # v1.5 (F0-6): trust the probed sample depth first; the pixel-format
     # NAME is only a fallback (a name without a depth suffix must never
     # silently shrink the range the alpha check compares against).
+    # v1.7 (audit N-02): the PNG codec reports bits_per_raw_sample=N/A and
+    # names like rgba64be carry no pNN suffix - the v1.5 fallback returned
+    # 8 for them and a genuinely half-transparent file failed as opaque.
     try:
         b = int(vs.get("bits_per_raw_sample") or 0)
         if b > 0:
             return b
     except Exception:
         pass
-    pf = vs.get("pix_fmt") or ""
+    pf = (vs.get("pix_fmt") or "").lower()
     m = re.search(r"p(\d+)", pf)
     if m:
         return int(m.group(1))
+    if "64" in pf or pf.startswith(("ya16", "gray16")) or "16be" in pf or "16le" in pf:
+        return 16  # rgba64/bgra64/argb64/gbrap16/ya16/rgb48-style names are 16-bit
     return 8
 
 
@@ -310,6 +315,12 @@ def main():
                 check("moov_faststart", False, "no moov box found", "moov before mdat")
             else:
                 check("moov_faststart", mv, "moov before mdat" if mv else "moov after mdat", "moov before mdat")
+        elif faststart_required:
+            # v1.7 (audit N-04): a requirement this gate cannot evaluate
+            # must FAIL loudly, never pass silently (the zero-check rule).
+            check("faststart_required", False,
+                  f"not applicable to {path.suffix.lower()} (no moov atom)",
+                  "spec must only require faststart for mp4/mov/m4v")
 
         aexp = spec.get("audio") or {}
         audio_required = bool(aexp.get("required", True))

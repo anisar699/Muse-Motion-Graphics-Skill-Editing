@@ -16,7 +16,7 @@ Animated identification band with name as the primary line, role or organisation
 
 ## 4. Captions and subtitle animation
 
-Accessibility captions are faithful synchronised text with no animation or a simple fade, delivered as sidecar SRT or VTT and or burned in. Social burned in captions are a different product with word by word karaoke highlight, pop or scale on the spoken word, and 1 to 3 words or short phrases per page in TikTok style. Build social captions from word level timestamps, group words into pages that fit the frame, use one Sequence per page, and highlight the word whose start and end contain the current time. Standard limits are at most 42 characters per line, at most 2 lines, and at most 20 characters per second for adults.
+Accessibility captions are faithful synchronised text with no animation or a simple fade, delivered as sidecar SRT or VTT and or burned in. Social burned in captions are a different product with word by word karaoke highlight. Two grouping models exist in this skill and must not be conflated (v1.7, audit D-06): the REMOTION TikTok-style model groups 1 to 3 words or short phrases per page inside the same Sequence as the clip and highlights the word whose start and end contain the current time; the PYTHON skill-bar engine (scripts/build_captions.py, the locked house styles) groups whole phrases into cues of at most 42 characters per line, at most 2 lines, at most 20 characters per second for adults, with cue timing anchored to the speech and the highlight sweeping word by word inside the cue. Standard limits for both: at most 42 characters per line, at most 2 lines, and at most 20 characters per second for adults.
 
 ## 5. Callouts and annotations
 

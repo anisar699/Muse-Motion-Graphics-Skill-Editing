@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Muse Motion shipped regression suite (v1.3).
+"""Muse Motion shipped regression suite (v1.7).
 
 Self-contained: needs python3, ffmpeg, ffprobe and Pillow. Run directly:
   python3 tests/test_muse_motion_regression.py
-Exits 0 when every case matches the v1.3 contract, 1 otherwise.
+Exits 0 when every case matches the v1.7 contract, 1 otherwise.
 Cases are seeded from the v1.0 auditors' 18-case suite and the v1.1 audit's
 reproduction index (section 6), re-expressed against the v1.2 contract.
 """
@@ -395,6 +395,143 @@ def main():
     record("N10 F0-2 wide-gamut source FAILS bt709 spec; converted pixels PASS",
            n10a and rc == 0 and "PASS color_space" in out)
 
+    # --- v1.7: fourth audit fixes (N-01..N-04, C-01, H-01..H-05, M-02/03/05/08) ---
+    foreign = tmp / "foreign"
+    foreign.mkdir()
+    (foreign / "frame_0000.png").write_bytes(b"RENDER OUTPUT - NOT THE SAMPLER'S")
+    sh(["python3", str(SAMPLER), str(media), str(foreign)])
+    record("V01 N-01 sampler never deletes foreign frame files",
+           (foreign / "frame_0000.png").read_bytes() == b"RENDER OUTPUT - NOT THE SAMPLER'S")
+    half_png = tmp / "half.png"
+    sh([sys.executable, "-c", "from PIL import Image; Image.new('RGBA', (64, 64), (255, 0, 0, 128)).save(r'" + str(half_png) + "')"])
+    sh(["ffmpeg", "-y", "-v", "error", "-loop", "1", "-i", str(half_png), "-t", "1",
+        "-c:v", "png", "-pix_fmt", "rgba64be", str(tmp / "half64.mov")])
+    rc, out = qrun(tmp / "half64.mov", spec_alpha)
+    record("V02 N-02 half-transparent PNG-codec alpha passes on the 65535 scale",
+           "PASS alpha_content" in out and "of 65535" in out)
+    sh(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "testsrc=duration=1:size=320x240:rate=10",
+        "-f", "lavfi", "-i", "sine=frequency=440:duration=1", "-c:v", "libvpx-vp9",
+        "-pix_fmt", "yuv420p", "-c:a", "libopus", str(tmp / "fs.webm")])
+    rc, out = qrun(tmp / "fs.webm", {"faststart_required": True})
+    record("V03 N-04 faststart_required on WebM FAILs loudly, never silently",
+           rc == 1 and "FAIL faststart_required" in out)
+    c01_pairs = ([("aa", 0.0, 2.2), ("bb", 2.3, 4.5), ("cc", 4.6, 6.8)]
+                 + [(w, 6.9 + i * 0.1, 7.0 + i * 0.1) for i, w in enumerate(
+                     ["ddddd", "eeeee", "fffff", "ggggg", "hhhhh", "iiiii", "jjjjj", "kkkkk", "lllll"])])
+    c01 = tmp / "c01.json"
+    c01.write_text(json.dumps(words_json("en", c01_pairs)))
+    out_c01 = tmp / "caps_c01"
+    r = sh([sys.executable, str(BUILD_CAPS), str(c01), "--lang", "en",
+            "--out-dir", str(out_c01), "--duration", "8"])
+    cj = json.loads((out_c01 / "captions.json").read_text()) if (out_c01 / "captions.json").exists() else {}
+    spoken = {w: s for w, s, _ in c01_pairs}
+    anchored = bool(cj.get("cues")) and all(
+        c["start"] >= spoken[c["lines"][0].split()[0]] - 0.35 for c in cj["cues"])
+    record("V04 C-01 no cue starts more than 0.35s before its first word",
+           r.returncode == 0 and anchored)
+    h04 = tmp / "h04.json"
+    h04.write_text(json.dumps(words_json("en",
+        [(f"w{i:02d}xx", i * 0.24, i * 0.24 + 0.2) for i in range(20)])))
+    out_h04 = tmp / "caps_h04"
+    r = sh([sys.executable, str(BUILD_CAPS), str(h04), "--lang", "en",
+            "--out-dir", str(out_h04), "--duration", "5.0"])
+    cj = json.loads((out_h04 / "captions.json").read_text()) if (out_h04 / "captions.json").exists() else {}
+    record("V05 H-04 no cue runs past the timeline duration; clamps declared",
+           r.returncode == 0 and cj.get("cues") and cj["cues"][-1]["end"] <= 5.001
+           and cj.get("cues_clamped_to_duration", 0) >= 1)
+    hot = tmp / "hot.mp4"
+    sh(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i",
+        "aevalsrc=0.9*sin(2*PI*440*t):d=2:s=48000", "-af", "volume=6dB",
+        "-c:a", "aac", str(hot)])
+    multi = tmp / "multi.mp4"
+    (tmp / "sub.srt").write_text("1\n00:00:00,000 --> 00:00:01,500\nHello subtitle\n")
+    sh(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "testsrc=duration=2:size=320x240:rate=10",
+        "-i", str(hot), "-f", "lavfi", "-i", "sine=frequency=880:duration=2:sample_rate=48000",
+        "-i", str(tmp / "sub.srt"), "-map", "0:v", "-map", "1:a", "-map", "2:a", "-map", "3:s",
+        "-c:v", "libx264", "-c:a", "aac", "-c:s", "mov_text", str(multi)])
+    r = sh([sys.executable, str(PEAK), str(multi)])
+    types = []
+    pf = tmp / "multi-peakfixed.mp4"
+    if pf.exists():
+        pr = sh(["ffprobe", "-v", "error", "-show_entries", "stream=codec_type",
+                 "-of", "csv=p=0", str(pf)])
+        types = sorted(pr.stdout.split())
+    record("V06 H-02 peak_guard preserves every stream (2 audio + subtitle)",
+           r.returncode == 0 and types == ["audio", "audio", "subtitle", "video"])
+    out_small = tmp / "caps_small"
+    sh([sys.executable, str(BUILD_CAPS), str(en_tr), "--lang", "en",
+        "--out-dir", str(out_small), "--video", "640x360", "--duration", "4.0"])
+    d = base(); d["captions"] = {"mode": "burned", "language": "ur", "style": "nastaliq-bar",
+                                 "highlight": "word", "source": str(out_small / "captions.json")}
+    rc, out = vrun(d)
+    record("V07 H-01 render gate rejects a captions build that mismatches the directive",
+           rc == 1 and "does not match captions.language" in out)
+    d = base(); d["captions"] = {"mode": "burned", "language": "en", "style": "skill-bar",
+                                 "highlight": "word", "source": str(out_small / "captions.json")}
+    rc, out = vrun(d)
+    record("V08 H-01 render gate accepts a captions build that matches",
+           rc == 0 and "VALID" in out)
+    lie = tmp / "lie.json"
+    lie.write_text(json.dumps(words_json("ur", [("Hello", 0.0, 0.3), ("world", 0.3, 0.7),
+                                                ("this", 0.7, 1.0), ("is", 1.0, 1.3)])))
+    r = sh([sys.executable, str(BUILD_CAPS), str(lie), "--lang", "ur",
+            "--out-dir", str(tmp / "caps_lie"), "--duration", "2"])
+    record("V09 M-03 a transcript whose label lies about its script is refused",
+           r.returncode == 2 and "Arabic script" in (r.stdout + r.stderr))
+    srt3 = tmp / "three.srt"
+    srt3.write_text("1\n00:00:00,000 --> 00:00:02,000\nline one\nline two\nline three\n")
+    r = sh([sys.executable, str(CAPS), str(srt3)])
+    record("V10 M-05 checker errors on a cue with more than 2 lines",
+           r.returncode == 1 and "3 lines > 2" in (r.stdout + r.stderr))
+    srtb = tmp / "backwards.srt"
+    srtb.write_text("1\n00:00:02,000 --> 00:00:01,000\nbackwards cue\n")
+    r = sh([sys.executable, str(CAPS), str(srtb)])
+    record("V11 M-05 checker errors on a backwards cue",
+           r.returncode == 1 and "backwards cue" in (r.stdout + r.stderr))
+    badj = tmp / "bad.json"; badj.write_text("{not json")
+    r = sh([sys.executable, str(BUILD_CAPS), str(badj), "--lang", "en"])
+    record("V12 M-01 malformed transcript JSON is a clean error, no traceback",
+           r.returncode == 2 and "Traceback" not in (r.stdout + r.stderr))
+    miss = tmp / "missing_end.json"
+    miss.write_text(json.dumps({"language": "en", "segments": [
+        {"start": 0, "end": 1, "text": "x", "words": [{"word": "Hello", "start": 0.0}]}]}))
+    r = sh([sys.executable, str(BUILD_CAPS), str(miss), "--lang", "en"])
+    record("V13 M-08 a word missing its end time is a clean error",
+           r.returncode == 2 and "malformed" in (r.stdout + r.stderr))
+    rare = tmp / "rare.json"
+    rare.write_text(json.dumps(words_json("ur", [("خلاباز", 0.0, 0.4), ("مائیکروسکوپ", 0.4, 0.9),
+                                                 ("سیارچہ", 0.9, 1.3), ("دوربین", 1.3, 1.7)])))
+    r = sh([sys.executable, str(BUILD_CAPS), str(rare), "--lang", "roman",
+            "--out-dir", str(tmp / "caps_rare"), "--duration", "2"])
+    record("V14 M-02 roman build fails loudly below 60 percent dictionary coverage",
+           r.returncode == 1 and "coverage" in (r.stdout + r.stderr))
+    out_vert = tmp / "caps_vert"
+    r = sh([sys.executable, str(BUILD_CAPS), str(en_tr), "--lang", "en",
+            "--out-dir", str(out_vert), "--video", "1080x1920", "--duration", "4.0"])
+    margin_ok = False
+    if r.returncode == 0 and (out_vert / "captions.json").exists():
+        import numpy as _np
+        from PIL import Image as _Im
+        cjv = json.loads((out_vert / "captions.json").read_text())
+        im = _Im.open(out_vert / cjv["cues"][0]["png"]).convert("RGBA")
+        rows = _np.where(_np.array(im)[:, :, 3].sum(axis=1) > 0)[0]
+        margin_ok = len(rows) > 0 and (1920 - 1 - int(rows.max())) >= 440
+    record("V15 H-05 portrait captions clear the platform UI band (>=440px)",
+           r.returncode == 0 and margin_ok)
+    burn_src = tmp / "burn_src.mp4"
+    sh(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "testsrc=duration=2:size=320x240:rate=24",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", str(burn_src)])
+    out_burn = tmp / "caps_burn"
+    sh([sys.executable, str(BUILD_CAPS), str(en_tr), "--lang", "en",
+        "--out-dir", str(out_burn), "--video", "320x240", "--duration", "2"])
+    r = sh(["ffmpeg", "-y", "-i", str(burn_src), "-f", "concat", "-safe", "0",
+            "-i", "layer.ffconcat", "-filter_complex",
+            "[0:v][1:v]overlay=0:0:format=auto:eof_action=pass,format=yuv420p[out]",
+            "-map", "[out]", "-map", "0:a?", "-c:v", "libx264", "-profile:v", "high",
+            "-crf", "18", "-c:a", "copy", "burned.mp4"], cwd=str(out_burn))
+    record("V16 M-06 the documented caption burn command runs as written",
+           r.returncode == 0 and (out_burn / "burned.mp4").exists())
+
     # --- v1.3: transcription ---
     try:
         import faster_whisper  # noqa: F401
@@ -405,6 +542,15 @@ def main():
         r = sh([sys.executable, str(TRANSCRIBE), str(media), "--out", str(tmp / "tr.json")])
         ok = r.returncode == 0 and (tmp / "tr.json").exists() and "segments" in json.loads((tmp / "tr.json").read_text())
         record("R01 transcribe.py writes a valid transcript JSON", ok)
+        cwd_dir = tmp / "cwd_out"
+        cwd_dir.mkdir()
+        stray = tmp / "transcript.json"
+        if stray.exists():
+            stray.unlink()
+        r = sh([sys.executable, str(TRANSCRIBE), str(media)], cwd=str(cwd_dir))
+        record("V17 M-07 transcribe default output lands in the CWD, not the source folder",
+               r.returncode == 0 and (cwd_dir / f"{media.stem}.transcript.json").exists()
+               and not stray.exists())
     else:
         record_skip("R01 transcribe.py writes a valid transcript JSON",
                     "faster-whisper not installed for this python")

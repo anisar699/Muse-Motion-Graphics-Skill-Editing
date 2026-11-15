@@ -3,11 +3,19 @@
 
 Checks an SRT caption file against the skill's caption limits:
   - line length      (default max 42 chars per line)
+  - line count       (default max 2 lines per cue; v1.7, audit M-05)
   - reading speed    (default max 20 chars/second over the cue duration)
-  - cue duration     (warns below 0.8s and above 7s by default)
+  - cue duration     (warns below 0.7s and above 7s by default; a cue
+                      ending at or before it starts is an ERROR, v1.7)
   - timing sanity    (overlapping cues are errors; gaps under 0.08s warn)
   - contrast         (only when --fg and --bg colours are given: the WCAG
                       contrast ratio of the caption style must be >= 4.5)
+
+Threshold note (v1.7, audit L-01): the numeric limits match the caption
+engine's (42 chars, 20 cps, 0.7s floor). The SEVERITY differs by design:
+this checker is the strict gate for sidecar SRT deliverables, so over-speed
+is an error here, while build_captions.py declares over-speed cues as
+speech-density bursts in captions.json for the burned-in workflow.
 
 What stays manual (honestly): flash-rate judgement for graphic sequences
 and whether a caption's wording is right. This tool checks form, not sense.
@@ -70,8 +78,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("file")
     ap.add_argument("--max-line", type=int, default=42)
+    ap.add_argument("--max-lines", type=int, default=2)
     ap.add_argument("--max-cps", type=float, default=20.0)
-    ap.add_argument("--min-dur", type=float, default=0.8)
+    ap.add_argument("--min-dur", type=float, default=0.7)
     ap.add_argument("--max-dur", type=float, default=7.0)
     ap.add_argument("--fg")
     ap.add_argument("--bg")
@@ -93,6 +102,11 @@ def main():
     for i, c in enumerate(cues, start=1):
         dur = c["end"] - c["start"]
         text = " ".join(c["lines"])
+        if len(c["lines"]) > args.max_lines:
+            errors.append(f"cue {i}: {len(c['lines'])} lines > {args.max_lines}")
+        if dur <= 0:
+            errors.append(f"cue {i}: ends at {c['end']:.2f}s at or before it starts "
+                          f"at {c['start']:.2f}s (backwards cue)")
         for ln in c["lines"]:
             if len(ln) > args.max_line:
                 errors.append(f"cue {i}: line {len(ln)} chars > {args.max_line}: {ln!r}")

@@ -6,8 +6,9 @@ PCM it is given, but the final AAC encode can overshoot it (measured on real
 deliveries: a master normalised to TP -1.0 came back from the encoder at
 -0.95 and -0.7 dBTP, failing the QC gate). This script closes that loop:
 measure the ENCODED file, and if its true peak is above the ceiling, apply
-the smallest sufficient gain reduction as an audio-only remux (video is
-stream-copied, never re-encoded) and measure again.
+the smallest sufficient gain reduction as an audio-only remux (video and
+every other stream are stream-copied and preserved, never re-encoded or
+dropped - v1.7) and measure again.
 
 Usage:
   python3 peak_guard.py FILE [--ceiling -1.0] [--margin 0.3]
@@ -103,11 +104,40 @@ def main():
     result["reduction_db"] = reduction
     out = src if args.in_place else src.with_name(src.stem + "-peakfixed" + src.suffix)
     tmp = src.with_name(src.stem + "-peakfix-tmp" + src.suffix)
-    r = subprocess.run(
-        ["ffmpeg", "-nostdin", "-y", "-v", "error", "-i", str(src),
-         "-c:v", "copy", "-af", f"volume=-{reduction:.1f}dB",
-         "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", str(tmp)],
+    # Stream preservation (v1.7, audit H-02): the v1.3 remux named no
+    # -map, so ffmpeg kept one video and one audio stream and silently
+    # dropped the rest (a second audio, subtitles, data). Map everything,
+    # copy every non-audio stream, and re-encode ONLY the audio (the
+    # volume filter requires it) - losslessly when the source is PCM or
+    # FLAC, otherwise AAC at the source's own bitrate (128-384k).
+    aprobe = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "a:0",
+         "-show_entries", "stream=codec_name,bit_rate", "-of", "json", str(src)],
         capture_output=True, text=True)
+    acodec, abr = "", 0
+    try:
+        st = json.loads(aprobe.stdout)["streams"][0]
+        acodec = st.get("codec_name") or ""
+        abr = int(st.get("bit_rate") or 0)
+    except Exception:
+        pass
+    if acodec.startswith("pcm"):
+        aenc = ["-c:a", "pcm_s16le"]
+    elif acodec == "flac":
+        aenc = ["-c:a", "flac"]
+    else:
+        # Floor at the v1.3-proven 192k: a hot full-scale sine re-encoded
+        # at a probed-but-lower 126k overshot the ceiling by +2.5 dB in
+        # regression (P02) - never trade peak safety for a smaller file.
+        kbps = min(max(abr // 1000, 192), 384) if abr else 192
+        aenc = ["-c:a", "aac", "-b:a", f"{kbps}k"]
+    cmd = ["ffmpeg", "-nostdin", "-y", "-v", "error", "-i", str(src),
+           "-map", "0", "-map_chapters", "0", "-c", "copy",
+           "-af", f"volume=-{reduction:.1f}dB"] + aenc
+    if src.suffix.lower() in (".mp4", ".m4v"):
+        cmd += ["-movflags", "+faststart"]
+    cmd.append(str(tmp))
+    r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
         print(f"peak_guard: ERROR remux failed: {r.stderr[-500:]}", file=sys.stderr)
         result["status"] = "error_remux"

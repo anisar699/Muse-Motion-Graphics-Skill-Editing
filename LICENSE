@@ -4,3 +4,8 @@ This skill package (documentation, scripts and templates) is the work of the
 author. No part of it may be redistributed or used commercially without the
 author's written permission, except for use by the author's own Muse
 installations.
+
+Third-party component: assets/fonts/NotoNastaliqUrdu.ttf is licensed under
+the SIL Open Font License 1.1 (not under the terms above); its license text
+ships alongside it as assets/fonts/OFL-NotoNastaliqUrdu.txt and governs the
+font file.

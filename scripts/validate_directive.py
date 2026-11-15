@@ -285,6 +285,27 @@ def validate(data, draft, directive_dir):
                         cpath = (directive_dir / cpath)
                     if not cpath.is_file():
                         E("CAPTIONS", f"captions.source not found: {csrc}")
+                    else:
+                        # Content match (v1.7, audit H-01): existence is
+                        # not enough - a stale or wrong-language build
+                        # must not reach the render. Compare the built
+                        # captions' own metadata against this directive.
+                        try:
+                            cmeta = json.loads(cpath.read_text(encoding="utf-8"))
+                        except Exception:
+                            cmeta = None
+                            E("CAPTIONS", f"captions.source is not valid JSON: {csrc}")
+                        if isinstance(cmeta, dict):
+                            if clang and cmeta.get("language") != clang:
+                                E("CAPTIONS", f"captions.source language {cmeta.get('language')!r} does not match captions.language {clang!r} - stale or wrong build")
+                            if cstyle and cmeta.get("style") != cstyle:
+                                E("CAPTIONS", f"captions.source style {cmeta.get('style')!r} does not match captions.style {cstyle!r} - stale or wrong build")
+                            if chigh and bool(cmeta.get("word_highlight")) != (chigh == "word"):
+                                E("CAPTIONS", f"captions.source word_highlight {cmeta.get('word_highlight')!r} does not match captions.highlight {chigh!r}")
+                            ccanvas = cmeta.get("canvas") or {}
+                            fmt = data.get("format") or {}
+                            if ccanvas.get("width") != fmt.get("width") or ccanvas.get("height") != fmt.get("height"):
+                                E("CAPTIONS", f"captions.source canvas {ccanvas.get('width')}x{ccanvas.get('height')} does not match format {fmt.get('width')}x{fmt.get('height')}")
 
     # ---- caption-zone placement (v1.6, owner rule 2026-11-15) ----
     # With burned/both captions, heading and fact cards parked in the
