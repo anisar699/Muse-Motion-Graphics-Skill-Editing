@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Muse Motion directive validator v1.2.
+"""Muse Motion directive validator v1.4.
 
 Two stages:
   strict (default)  - schema gate + render-ready gate (approval granted with a
@@ -7,6 +7,11 @@ Two stages:
                       inside the probed timeline, protected regions respected).
   --draft           - schema gate only. Prints "VALID (DRAFT - schema only,
                       NOT render permission)".
+
+v1.4 changes: optional top-level "captions" block (mode/language/style/source)
+for the caption engine; house styles locked by the owner (en/roman skill-bar,
+ur nastaliq-bar) warn on deviation; burned modes require the built
+captions.json to exist at the render gate.
 
 v1.2 changes (from the v1.1 developer audit):
   - source.kind: "video" | "audio" | "none" - audio-only (lyric) and
@@ -59,7 +64,13 @@ FPS_SET = {24, 25, 30, 48, 50, 60, 120, 23.976, 29.97, 59.94}
 CPS_WARN, CPS_FAIL = 20.0, 40.0
 
 TOP_KEYS = {"version", "project", "theme", "format", "source", "timeline",
-            "approval", "protected_regions", "beats", "notes"}
+            "approval", "protected_regions", "beats", "notes", "captions"}
+CAPTION_KEYS = {"mode", "language", "style", "source", "highlight"}
+CAPTION_HIGHLIGHTS = {"word", "none"}
+CAPTION_MODES = {"none", "sidecar", "burned", "both"}
+CAPTION_LANGS = {"en", "ur", "roman"}
+CAPTION_STYLES = {"skill-bar", "nastaliq-bar", "karaoke"}
+CAPTION_HOUSE_STYLE = {"en": "skill-bar", "roman": "skill-bar", "ur": "nastaliq-bar"}
 FORMAT_KEYS = {"width", "height", "fps", "aspect"}
 SOURCE_KEYS = {"path", "kind", "duration_s"}
 TIMELINE_KEYS = {"duration_s"}
@@ -242,6 +253,38 @@ def validate(data, draft, directive_dir):
                 E("APPROVAL_NOT_GRANTED", "approval.approved_by (who approved) is required for rendering")
             if not appr.get("approved_at"):
                 W("APPROVAL", "approval.approved_at is not recorded")
+
+    # ---- captions (v1.4, optional block) ----
+    caps = data.get("captions")
+    if caps is not None:
+        if not isinstance(caps, dict):
+            E("SCHEMA", "captions must be an object")
+        else:
+            unknown(caps, CAPTION_KEYS, "captions")
+            cmode = caps.get("mode")
+            if cmode not in CAPTION_MODES:
+                E("CAPTIONS", f"captions.mode must be one of {sorted(CAPTION_MODES)}, got {cmode!r}")
+            clang = caps.get("language")
+            if cmode in {"sidecar", "burned", "both"} and clang not in CAPTION_LANGS:
+                E("CAPTIONS", f"captions.language must be one of {sorted(CAPTION_LANGS)} when captions are on, got {clang!r}")
+            cstyle = caps.get("style")
+            if cstyle is not None and cstyle not in CAPTION_STYLES:
+                E("CAPTIONS", f"captions.style must be one of {sorted(CAPTION_STYLES)}, got {cstyle!r}")
+            chigh = caps.get("highlight")
+            if chigh is not None and chigh not in CAPTION_HIGHLIGHTS:
+                E("CAPTIONS", f"captions.highlight must be one of {sorted(CAPTION_HIGHLIGHTS)}, got {chigh!r}")
+            if clang in CAPTION_HOUSE_STYLE and cstyle is not None and cstyle != CAPTION_HOUSE_STYLE[clang]:
+                W("CAPTIONS", f"captions.style {cstyle!r} deviates from the locked house style {CAPTION_HOUSE_STYLE[clang]!r} for language {clang!r} (owner decision 2026-11-15)")
+            if not draft and cmode in {"burned", "both"}:
+                csrc = caps.get("source")
+                if not isinstance(csrc, str) or not csrc.strip():
+                    E("CAPTIONS", "captions.source (the captions.json built by build_captions.py) is required for burned captions at render time")
+                else:
+                    cpath = Path(csrc)
+                    if not cpath.is_absolute():
+                        cpath = (directive_dir / cpath)
+                    if not cpath.is_file():
+                        E("CAPTIONS", f"captions.source not found: {csrc}")
 
     # ---- protected regions ----
     protected = data.get("protected_regions") or []

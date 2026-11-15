@@ -5,7 +5,7 @@ description: Professional motion graphics video editing for user-supplied videos
 
 # Muse Motion
 
-Version 1.3 (2026-11-15). Changes from 1.0 are listed in CHANGELOG.md.
+Version 1.4 (2026-11-15). Changes from 1.0 are listed in CHANGELOG.md.
 
 ## Purpose and route selection
 
@@ -119,6 +119,14 @@ Version 1.3 (2026-11-15). Changes from 1.0 are listed in CHANGELOG.md.
 
 - Export one vertical master at 1080 by 1920, 9 to 16, 30 fps, and 10 to 16 Mbps for Shorts, Reels, and TikTok. Render per platform variants from the same composition when safe zones differ.
 
+## Captions (v1.4 caption engine)
+
+- House styles are locked (owner decision 2026-11-15): English and Roman Urdu use the `skill-bar` (charcoal bar, white bold text, amber underline); Urdu script uses the `nastaliq-bar` (same bar, bundled Noto Nastaliq Urdu, RTL). Both bars include word-by-word highlighting: the word being spoken turns amber inside the bar (one PNG state per word). A directive declares captions in its `captions` block (mode none|sidecar|burned|both, language en|ur|roman, style, highlight word|none, source = the captions.json to burn); deviating from the house style warns, and burned mode at the approval gate requires an existing captions source.
+
+- Build captions with scripts/build_captions.py from a word-timestamped transcript (scripts/transcribe.py output). It writes captions.json, captions.srt, and an ffmpeg concat overlay layer (layer.ffconcat) that is overlaid on the source exactly like a graphics layer, so captions can never collide with protected regions by accident and stay in sync with the directive's canvas. Cue timing is reading-time based (block-proportional tiling at <=20 cps); cues that genuinely cannot fit because the speech itself is faster are declared as over-speed bursts in captions.json, never silently hidden.
+
+- Language honesty is enforced by the tool: an English transcript yields English captions; an Urdu transcript yields Urdu script and Roman Urdu (transliterated via references/roman-urdu-dictionary.json, with the dictionary coverage percentage reported - extend the dictionary when coverage drops). English-to-Urdu or English-to-Roman is translation, not transcription: the tool refuses it unless a human supplies or approves the translated text.
+
 ## Verification gate
 
 - Inspect frames at the hook, every scene hero moment, every entrance and exit, every transition, and the final frame. Compare hero frames against the approved styleframes.
@@ -155,7 +163,7 @@ Version 1.3 (2026-11-15). Changes from 1.0 are listed in CHANGELOG.md.
 
 - Use templates/brief-template.md at intake, templates/editorial-directive-template.json for the directive, and templates/qc-checklist.md before delivery.
 
-- Run scripts/validate_directive.py on every directive JSON before rendering, and run scripts/qc_probe.py on every final file before delivery.
+- Run scripts/validate_directive.py on every directive JSON before rendering, and run scripts/qc_probe.py on every final file before delivery. Speech work: scripts/transcribe.py (local word timestamps), scripts/build_captions.py (caption engine), scripts/check_captions.py (SRT form checks), scripts/peak_guard.py (encoded-file true-peak fix).
 
 ## Available connectors
 

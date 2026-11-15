@@ -1,5 +1,16 @@
 # Muse Motion Changelog
 
+## v1.4 - 2026-11-15
+
+Caption engine added at the owner's request, with the house styles chosen by the owner from rendered samples: English and Roman Urdu use the skill-bar, Urdu script uses the Nastaliq bar, and both bars carry word-by-word amber highlighting of the spoken word (the owner's follow-up decision the same day).
+
+- New scripts/build_captions.py: turns a word-timestamped transcript (transcribe.py output) into captions.json, captions.srt and an ffmpeg concat overlay layer (layer.ffconcat + per-word PNG states). Cue timing is reading-time based: words are grouped at natural pauses and each block's window is tiled proportionally at <=20 cps with a 0.7s minimum cue duration (water-filled inside the block). Cues that cannot fit because the speech itself is denser are declared as over-speed bursts in captions.json and warned in the self-check - on the real 9.4-minute reference video (fast conversational speech), 32 of 253 cues are bursts at 20.3-25.9 cps; the rest meet the limit. That is a property of the speech, reported rather than hidden.
+- Languages: en (English transcript), ur (Urdu transcript, Nastaliq bar, RTL shaping via libraqm), roman (Urdu transcript transliterated with references/roman-urdu-dictionary.json; coverage percentage is computed and reported - 100% on the reference sentence; unknown words fall back to a character map and lower the score). The tool refuses cross-language requests (e.g. an English transcript for Urdu captions) because that is translation, not transcription.
+- Bundled font: assets/fonts/NotoNastaliqUrdu.ttf (SIL OFL 1.1, licence file alongside) ships in the package ZIP so the Urdu style renders identically anywhere. Note: the GitHub mirror carries every text file but not the .ttf binary (the connector's push rejects binaries); a clone should fetch the font from the package ZIP or Google Fonts.
+- validate_directive.py: optional top-level `captions` block (mode none|sidecar|burned|both, language en|ur|roman, style skill-bar|nastaliq-bar|karaoke, highlight word|none, source). Unknown keys/values are errors; deviating from the locked house style warns; at the approval gate, burned/both modes require captions.source to point at an existing captions.json. The directive template ships an example block (mode none).
+- Docs: SKILL.md gains a Captions section with the locked styles and the language-honesty rule; the workflow reference builds captions in the transcription pass; the ffmpeg reference gains the layer-burning command. skill.yaml and SKILL.md synchronised at version 1.4.
+- Tests: 11 new regression cases (K01-K11) cover the validator block, all three language builds, transliteration coverage, the translation refusal, word-highlight states and --no-highlight; the suite grows to 47 cases.
+
 ## v1.3 - 2026-11-15
 
 Three workflow features added at the owner's request, each closing a gap that cost real time on the v1.1/v1.2 deliveries. The shipped regression suite grows to 36 cases (all passing); the v1.0 auditors' 18-case suite still passes 18 of 18.

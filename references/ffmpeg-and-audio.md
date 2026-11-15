@@ -7,6 +7,10 @@ ffmpeg -i footage.mp4 -framerate <src_fps> -itsoffset 2.0 -i frames/frame_%04d.p
 
 Never time a PNG sequence with overlay's enable='between(t,...)': enable only hides the overlay while the sequence keeps consuming frames from t=0, so the entrance animation is skipped and the last frame freezes on screen. Delay the sequence itself with -itsoffset (or setpts) so frame 0 lands on the beat start. Match -framerate to the source frame rate, never a hard-coded 30.
 
+Caption overlay layer (v1.4): scripts/build_captions.py writes a layer.ffconcat (gap PNG + one PNG state per spoken word for the highlight). Burn it over the source like any graphics layer:
+ffmpeg -i footage.mp4 -f concat -safe 0 -i captions/layer.ffconcat -filter_complex "[0:v][1:v]overlay=0:0:format=auto:eof_action=pass,format=yuv420p[out]" -map "[out]" -map "0:a?" -c:v libx264 -profile:v high -crf 18 -c:a copy out.mp4
+Run the concat input from the captions folder (paths inside the file are relative to it), and keep the source frame rate: concat PNG layers play at the input rate, so add -framerate <src_fps> before the concat input when the source is not 25 fps.
+
 Single transparent video overlay:
 ffmpeg -i footage.mp4 -i overlay.mov -filter_complex "[0:v][1:v]overlay=x=0:y=0:format=auto:eof_action=pass,format=yuv420p[out]" -map "[out]" -map "0:a?" -c:v libx264 -crf 18 out.mp4
 

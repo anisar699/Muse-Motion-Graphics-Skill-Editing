@@ -193,6 +193,63 @@ def main():
     r = sh(["python3", str(CAPS), str(tmp / "nope.srt")])
     record("C04 caption checker on missing file exits 2", r.returncode == 2)
 
+    # --- v1.4: caption engine + validator captions block ---
+    BUILD_CAPS = SKILL / "scripts" / "build_captions.py"
+    d = base(); d["captions"] = {"mode": "sidecar", "language": "en", "style": "skill-bar", "highlight": "word"}
+    record("K01 validator accepts a valid captions block", vrun(d)[0] == 0)
+    d = base(); d["captions"] = {"mode": "sidecar", "language": "xx"}
+    record("K02 validator rejects an unknown caption language", vrun(d)[0] == 1)
+    d = base(); d["captions"] = {"mode": "sidecar", "language": "en", "highlight": "letter"}
+    record("K03 validator rejects an unknown highlight mode", vrun(d)[0] == 1)
+    d = base(); d["captions"] = {"mode": "burned", "language": "en", "style": "skill-bar"}
+    record("K04 render gate requires captions.source for burned mode", vrun(d)[0] == 1)
+    d = base(); d["captions"] = {"mode": "sidecar", "language": "ur", "style": "skill-bar"}
+    rc, out = vrun(d)
+    record("K05 house-style deviation warns but stays VALID", rc == 0 and "house style" in out)
+
+    def words_json(lang, pairs):
+        ws = [{"word": w, "start": s, "end": e, "probability": 0.9} for w, s, e in pairs]
+        return {"language": lang, "segments": [{"start": pairs[0][1], "end": pairs[-1][2],
+                "text": " ".join(w for w, _, _ in pairs), "words": ws}]}
+    en_tr = tmp / "en_tr.json"
+    en_tr.write_text(json.dumps(words_json("en", [("When", 0.0, 0.3), ("your", 0.3, 0.55),
+        ("phone", 0.55, 0.9), ("is", 0.9, 1.05), ("in", 1.05, 1.2), ("sight,", 1.2, 1.6),
+        ("your", 1.7, 1.95), ("attention", 1.95, 2.5), ("drops.", 2.5, 3.0)])))
+    out_en = tmp / "caps_en"
+    r = sh([sys.executable, str(BUILD_CAPS), str(en_tr), "--lang", "en", "--out-dir", str(out_en), "--duration", "4.0"])
+    cj = json.loads((out_en / "captions.json").read_text()) if (out_en / "captions.json").exists() else {}
+    record("K06 EN captions build with word-highlight states",
+           r.returncode == 0 and cj.get("word_highlight") is True
+           and len(cj.get("cues", [])) >= 1 and len(cj["cues"][0].get("states", [])) >= 2)
+    r2 = sh([sys.executable, str(CAPS), str(out_en / "captions.srt")])
+    record("K07 generated EN SRT passes check_captions", r2.returncode == 0)
+    ur_tr = tmp / "ur_tr.json"
+    ur_tr.write_text(json.dumps(words_json("ur", [("جب", 0.0, 0.3), ("فون", 0.3, 0.7),
+        ("نظر", 0.7, 1.1), ("کے", 1.1, 1.3), ("سامنے", 1.3, 1.8), ("ہو،", 1.8, 2.1),
+        ("توجہ", 2.2, 2.7), ("کم", 2.7, 3.0), ("ہو", 3.0, 3.3), ("جاتی", 3.3, 3.7), ("ہے۔", 3.7, 4.0)])))
+    out_rom = tmp / "caps_rom"
+    r = sh([sys.executable, str(BUILD_CAPS), str(ur_tr), "--lang", "roman", "--out-dir", str(out_rom), "--duration", "5.0"])
+    cj = json.loads((out_rom / "captions.json").read_text()) if (out_rom / "captions.json").exists() else {}
+    joined = " ".join(" ".join(c.get("lines", [])) for c in cj.get("cues", [])).lower()
+    record("K08 Roman transliteration + full dictionary coverage",
+           r.returncode == 0 and "jab phone nazar" in joined
+           and cj.get("dictionary_coverage_percent") == 100.0)
+    out_ur = tmp / "caps_ur"
+    r = sh([sys.executable, str(BUILD_CAPS), str(ur_tr), "--lang", "ur", "--out-dir", str(out_ur), "--duration", "5.0"])
+    cj = json.loads((out_ur / "captions.json").read_text()) if (out_ur / "captions.json").exists() else {}
+    record("K09 Urdu Nastaliq captions build with states",
+           r.returncode == 0 and cj.get("style") == "nastaliq-bar"
+           and len(cj.get("cues", [])) >= 1 and len(cj["cues"][0].get("states", [])) >= 2)
+    r = sh([sys.executable, str(BUILD_CAPS), str(en_tr), "--lang", "ur", "--out-dir", str(tmp / "caps_bad"), "--duration", "4.0"])
+    record("K10 English transcript is refused for Urdu (no silent translation)", r.returncode == 2)
+    out_nh = tmp / "caps_nh"
+    r = sh([sys.executable, str(BUILD_CAPS), str(en_tr), "--lang", "en", "--out-dir", str(out_nh),
+            "--duration", "4.0", "--no-highlight"])
+    cj = json.loads((out_nh / "captions.json").read_text()) if (out_nh / "captions.json").exists() else {}
+    record("K11 --no-highlight renders one static state per cue",
+           r.returncode == 0 and cj.get("word_highlight") is False
+           and all(len(c.get("states", [])) == 1 for c in cj.get("cues", [])))
+
     # --- v1.3: transcription ---
     try:
         import faster_whisper  # noqa: F401

@@ -8,6 +8,8 @@ Use a written brief naming audience, single message, platforms and aspects, dura
 
 ## Transcription and timing
 
+Transcribe first with scripts/transcribe.py (local faster-whisper, word timestamps). When the deliverable carries captions, build them in the same pass with scripts/build_captions.py (see SKILL.md, Captions): the engine consumes the same transcript, writes captions.json + captions.srt + the layer.ffconcat overlay, and the directive's `captions` block records mode, language, house style and the captions source. Declare the captions block before validation; burned mode at the approval gate requires the captions source file to exist.
+
 The first production artefact for any speech video is a word timestamped transcript. It drives caption pages, kinetic type hits, cut points on phrase boundaries, B roll and callout placement, and the animatic. Cut pauses above about 0.3 seconds in short form as a practitioner retention heuristic. For music, build a beat grid of BPM and downbeats in the same timeline JSON. Everything downstream consumes word objects with text, startMs and endMs plus beat and scene markers. Never hand type timings.
 
 Built-in route (v1.3): scripts/transcribe.py transcribes locally with faster-whisper and writes the transcript JSON (segments with word timestamps) the directive design consumes. It decodes the audio to 16 kHz mono PCM with ffmpeg and feeds Whisper a numpy array, which sidesteps a PyAV build bug (av.open rejects the metadata_errors keyword) seen on some installations. Nothing is uploaded.
