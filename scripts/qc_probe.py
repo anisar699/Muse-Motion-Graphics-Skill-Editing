@@ -49,6 +49,7 @@ SPEC_KEYS = {
     "duration": {"expected_s": (int, float), "tolerance_s": (int, float)},
     "overlay": {"alpha_required": bool},
     "review": {"requires_human_signoff": bool},
+    "faststart_required": bool,
 }
 ALPHA_PIX_HINTS = ("yuva", "rgba", "argb", "bgra", "abgr", "gbrap", "ya8", "ya16")
 
@@ -157,14 +158,20 @@ def alpha_range(path, codec):
 
 
 def bit_depth_of(vs):
+    # v1.5 (F0-6): trust the probed sample depth first; the pixel-format
+    # NAME is only a fallback (a name without a depth suffix must never
+    # silently shrink the range the alpha check compares against).
+    try:
+        b = int(vs.get("bits_per_raw_sample") or 0)
+        if b > 0:
+            return b
+    except Exception:
+        pass
     pf = vs.get("pix_fmt") or ""
     m = re.search(r"p(\d+)", pf)
     if m:
         return int(m.group(1))
-    try:
-        return int(vs.get("bits_per_raw_sample") or 8)
-    except Exception:
-        return 8
+    return 8
 
 
 def main():
@@ -291,7 +298,13 @@ def main():
             d = float(fmt.get("duration", 0) or 0)
             check("duration", abs(d - float(dexp["expected_s"])) <= float(dexp.get("tolerance_s", 0.5)),
                   round(d, 3), dexp["expected_s"])
-        if path.suffix.lower() in (".mp4", ".mov", ".m4v"):
+        # Faststart is a DELIVERY policy, not a container property (v1.5,
+        # F0-1): the spec decides. Unset means web containers (.mp4/.m4v)
+        # require it and editor-master containers (.mov) do not.
+        faststart_required = spec.get("faststart_required")
+        if faststart_required is None:
+            faststart_required = path.suffix.lower() in (".mp4", ".m4v")
+        if faststart_required and path.suffix.lower() in (".mp4", ".mov", ".m4v"):
             mv = moov_before_mdat(path)
             if mv is None:
                 check("moov_faststart", False, "no moov box found", "moov before mdat")

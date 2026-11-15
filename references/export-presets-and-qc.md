@@ -4,6 +4,8 @@
 
 Container for YouTube is MP4 with moov atom at front, video H.264 High Profile progressive with closed GOP at half the frame rate and CABAC and VBR at 4.2.0, audio AAC LC at 48 kHz with stereo at 384 kbps, colour BT.709 SDR, and upload at the recorded frame rate. YouTube re encodes everything, and the table is a quality reference rather than a hard limit.
 
+Delivery policies (v1.5, F0-1/F0-5): faststart is a per-deliverable policy declared in the QC spec as `faststart_required`, never a blanket container rule. Web MP4 deliverables (youtube_1080p, vertical_1080x1920 specs) set it true; editor masters and alpha overlays set it false (an unset spec defaults to required for .mp4/.m4v and not required for .mov). Alpha overlays ship with TWO specs: delivery-spec-alpha-overlay.json (ProRes 4444 .mov) and delivery-spec-vp9-alpha-overlay.json (VP9 .webm) — check each deliverable against its own spec; a valid VP9 overlay fails the ProRes spec on codec alone, by design.
+
 - YouTube long form 1920 by 1080 at 24 to 30 fps is 8 Mbps, and at 48 to 60 fps is 12 Mbps.
 - YouTube long form HDR at 1080p is 10 Mbps, and 15 Mbps at 60 fps.
 - YouTube 1440p at 30 fps is 16 Mbps and at 60 fps is 24 Mbps. Uploading a 1080p master at 1440p is a common quality tactic.

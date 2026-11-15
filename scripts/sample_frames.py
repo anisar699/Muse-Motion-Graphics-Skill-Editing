@@ -94,6 +94,10 @@ def main(argv):
             print(f"TOOL ERROR: could not read directive: {exc}")
             return 2
     out.mkdir(parents=True, exist_ok=True)
+    # Stale-file protection (v1.5, F0-4): frames or sheets from an earlier
+    # run in this folder must never survive into a review of this run.
+    for stale in list(out.glob("frame_*.png")) + list(out.glob("contact_sheet*.png")):
+        stale.unlink()
     frames = []
     for name, t in points.items():
         safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)[:60]
@@ -120,18 +124,27 @@ def main(argv):
         canvas.paste(im, (0, 28))
         ImageDraw.Draw(canvas).text((8, 7), f"{name} @ {t:.1f}s", fill=(255, 255, 255))
         thumbs.append(canvas)
-    w = sum(t.width for t in thumbs)
-    h = max(t.height for t in thumbs)
-    sheet = Image.new("RGB", (w, h), (0, 0, 0))
-    x = 0
-    for t in thumbs:
-        sheet.paste(t, (x, 0))
-        x += t.width
-    sheet_path = out / "contact_sheet.png"
-    sheet.save(sheet_path)
+    # Grid sheets with pagination (v1.5, F0-4): at most 6 columns and 24
+    # thumbs per sheet, so a many-beat directive stays reviewable.
+    COLS, PER_PAGE = 6, 24
+    sheet_paths = []
+    pages = [thumbs[i:i + PER_PAGE] for i in range(0, len(thumbs), PER_PAGE)]
+    for pi, page in enumerate(pages):
+        cols = min(COLS, len(page))
+        rows = (len(page) + cols - 1) // cols
+        cw = max(t.width for t in page)
+        ch = max(t.height for t in page)
+        sheet = Image.new("RGB", (cols * cw, rows * ch), (0, 0, 0))
+        for idx, t in enumerate(page):
+            sheet.paste(t, ((idx % cols) * cw, (idx // cols) * ch))
+        sp = out / ("contact_sheet.png" if len(pages) == 1 else f"contact_sheet_{pi + 1:02d}.png")
+        sheet.save(sp)
+        sheet_paths.append(sp)
+    sheet_path = sheet_paths[0]
     manifest = {"source": str(src), "duration_s": dur,
                 "frames": [{"label": n, "time_s": round(t, 2), "file": str(f)} for n, t, f in frames],
                 "contact_sheet": str(sheet_path),
+                "contact_sheets": [str(s) for s in sheet_paths],
                 "human_signoff_required": True}
     (out / "frames_manifest.json").write_text(json.dumps(manifest, indent=1), encoding="utf-8")
     print("frames:", len(frames), "contact sheet:", sheet_path)

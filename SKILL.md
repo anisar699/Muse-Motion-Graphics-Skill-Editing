@@ -5,7 +5,7 @@ description: Professional motion graphics video editing for user-supplied videos
 
 # Muse Motion
 
-Version 1.4 (2026-11-15). Changes from 1.0 are listed in CHANGELOG.md.
+Version 1.5 (2026-11-15). Changes from 1.0 are listed in CHANGELOG.md.
 
 ## Purpose and route selection
 
@@ -21,7 +21,7 @@ Version 1.4 (2026-11-15). Changes from 1.0 are listed in CHANGELOG.md.
 
 ## Fast professional workflow
 
-- Start with intake. Probe every source with ffprobe, record width, height, exact frame rate, duration, codec, colour, and audio sample rate, and list the deliverables, platforms, aspects, caption needs, and deadline in the brief template.
+- Start with intake. Probe every source with ffprobe, record width, height, exact frame rate, duration, codec, colour, and audio sample rate, and list the deliverables, platforms, aspects, caption needs, and deadline in the brief template. If the colour tags are not BT.709 SDR, resolve the source through the non-BT.709 route in references/ffmpeg-and-audio.md (convert BT.2020 SDR pixels, or stop and report PQ/HLG as unsupported) before designing anything; never relabel tags without converting pixels.
 
 - Transcribe locally before designing anything. Extract 16 kHz mono audio with ffmpeg, run faster-whisper with word timestamps, cache the transcript JSON, and flag every word with probability below 0.80 for a human check of names and numbers.
 
@@ -135,7 +135,7 @@ Version 1.4 (2026-11-15). Changes from 1.0 are listed in CHANGELOG.md.
 
 - Check captions by ear and eye. Confirm names, numbers, and low confidence words, keep standard captions at or below 42 characters per line and 2 lines, and keep reading speed at or below 20 characters per second for adults. Run scripts/check_captions.py on the SRT to automate the form checks (line length, reading speed, cue duration, overlaps, and WCAG contrast when style colours are given); wording stays a human judgement. For speech sources, scripts/transcribe.py produces the word-timestamped transcript locally (faster-whisper, PCM route) that captions and beats are timed from.
 
-- Measure loudness and true peak on the final encoded file, not on the project. First run scripts/peak_guard.py on the encoded file: the AAC encode can overshoot loudnorm's true-peak ceiling (measured -0.95 and -0.7 dBTP against a -1.0 ceiling on real deliveries), and the guard applies the smallest sufficient gain reduction as an audio-only remux and re-measures. Then run scripts/qc_probe.py on the final file with a per-deliverable --spec file and save the --report JSON: it enforces audio presence (missing audio fails as AUDIO_STREAM_MISSING, digital silence fails as AUDIO_SILENT), loudness target and tolerance, true peak ceiling, dimensions, frame rate (0.01 tolerance, VFR detected), codec, pixel format, profile, colour tags, duration, alpha when required (format AND decoded content - a constant-opaque alpha fails), and front placed moov atom for MP4/MOV, and it exits nonzero on any failure; spec keys are whitelisted, and starter specs live in templates/. Use scripts/sample_frames.py to extract hook, quarter, hero, three-quarter and end frames plus a contact sheet for the human visual check (with --directive it also samples every beat start, reveal and end).
+- Measure loudness and true peak on the final encoded file, not on the project. First run scripts/peak_guard.py on the encoded file: the AAC encode can overshoot loudnorm's true-peak ceiling (measured -0.95 and -0.7 dBTP against a -1.0 ceiling on real deliveries), and the guard applies the smallest sufficient gain reduction as an audio-only remux and re-measures. Then run scripts/qc_probe.py on the final file with a per-deliverable --spec file and save the --report JSON: it enforces audio presence (missing audio fails as AUDIO_STREAM_MISSING, digital silence fails as AUDIO_SILENT), loudness target and tolerance, true peak ceiling, dimensions, frame rate (0.01 tolerance, VFR detected), codec, pixel format, profile, colour tags, duration, alpha when required (format AND decoded content - a constant-opaque alpha fails), and front placed moov atom when the spec requires faststart (a per-deliverable policy since v1.5: web MP4 specs require it, editor-master and alpha specs do not), and it exits nonzero on any failure; spec keys are whitelisted, and starter specs live in templates/. Use scripts/sample_frames.py to extract hook, quarter, hero, three-quarter and end frames plus a contact sheet for the human visual check (with --directive it also samples every beat start, reveal and end).
 
 - Apply the accessibility hard limits. Keep contrast at or above 4.5 to 1 for normal text and 3 to 1 for large text, and never flash more than 3 times in any 1 second period.
 

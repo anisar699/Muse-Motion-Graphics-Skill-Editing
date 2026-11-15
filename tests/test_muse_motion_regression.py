@@ -31,6 +31,13 @@ def record(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + (f"  [{detail}]" if detail and not ok else ""))
 
 
+def record_skip(name, detail=""):
+    """Honest SKIP (v1.5, F0-3): a skipped case is reported as skipped and
+    is never counted as a pass."""
+    RESULTS.append((name, None, detail))
+    print("SKIP " + name + (f"  [{detail}]" if detail else ""))
+
+
 def sh(cmd, **kw):
     return subprocess.run(cmd, capture_output=True, text=True, **kw)
 
@@ -85,24 +92,35 @@ def main():
     record("T05 true override passes WITH a WARN line", rc == 0 and "PROTECTED_OVERRIDE" in out)
     d = base(); d["beats"][0].pop("on_screen_copy")
     d["beats"][0]["reveal_sync"] = [{"element": "NEVER DECLARED", "time": 3.0}]
-    record("T06 reveal_sync without on_screen_copy is INVALID", vrun(d)[0] == 1)
+    rc, out = vrun(d)
+    record("T06 reveal_sync without on_screen_copy is INVALID", rc == 1 and "reveal_sync requires on_screen_copy" in out)
     d = base(); d["version"] = True
-    record("T09 version true is INVALID", vrun(d)[0] == 1)
+    rc, out = vrun(d)
+    record("T09 version true is INVALID", rc == 1 and "version must be the integer 1" in out)
     d = base(); d["beats"][0].pop("id")
-    record("T10 beat without id is INVALID", vrun(d)[0] == 1)
+    rc, out = vrun(d)
+    record("T10 beat without id is INVALID", rc == 1 and "a non-empty string id is required" in out)
     d = base(); d["beats"][0]["transtion_in"] = "banana-swirl"
-    record("T13 unknown beat key is INVALID", vrun(d)[0] == 1)
+    rc, out = vrun(d)
+    record("T13 unknown beat key is INVALID", rc == 1 and "unknown key" in out)
     d = base(); d["beats"][0].update({"treatment": "CLEAN_PRESENTER", "layout": "banana"})
-    record("T20 non-rect layout is INVALID for any treatment", vrun(d)[0] == 1)
+    rc, out = vrun(d)
+    record("T20 non-rect layout is INVALID for any treatment", rc == 1 and "layout must be null or a rectangle" in out)
     d = base(); d["beats"][0].update({"start": 1.0, "end": 1.5, "on_screen_copy": ["X" * 500]})
-    record("T21 500 chars in 0.5s is INVALID (reading speed)", vrun(d)[0] == 1)
-    d = base(); d["format"] = {"width": 1921, "height": 1081, "fps": 1000, "aspect": "16:9"}
-    record("T16/T17 odd dims and fps 1000 are INVALID", vrun(d)[0] == 1)
+    rc, out = vrun(d)
+    record("T21 500 chars in 0.5s is INVALID (reading speed)", rc == 1 and "on-screen copy runs at" in out)
+    d = base(); d["format"] = {"width": 1921, "height": 1081, "fps": 30, "aspect": "16:9"}
+    rc, out = vrun(d)
+    record("T16 odd canvas dims are INVALID", rc == 1 and "must be even" in out)
+    d = base(); d["format"] = {"width": 1920, "height": 1080, "fps": 1000, "aspect": "16:9"}
+    rc, out = vrun(d)
+    record("T17 fps 1000 is INVALID", rc == 1 and "is not a standard frame rate" in out)
     d = base(); d["format"] = {"width": 1080, "height": 1920, "fps": 30, "aspect": "4:7"}
     record("T22b aspect 4:7 for 1080x1920 is INVALID", vrun(d)[0] == 1)
     d = base(); d["source"] = {"path": str(media), "duration_s": 10.5}
     d["beats"][0].update({"end": 10.5})
-    record("T24 declared duration beyond probed is INVALID", vrun(d)[0] == 1)
+    rc, out = vrun(d)
+    record("T24 declared duration beyond probed is INVALID", rc == 1 and "differs from probed duration" in out)
     d = base(); d["beats"][0]["transition_in"] = "morph"
     record("T14 morph token is VALID", vrun(d)[0] == 0)
     d = base(); d["beats"][0]["transition_in"] = "slide-from-left"
@@ -132,19 +150,26 @@ def main():
     record("Q05a unknown spec key exits 2", rc == 2)
     rc, _ = qrun(media, {"audio": {"lufs_target": None}})
     record("Q06 null spec value exits 2 (no traceback)", rc == 2)
-    rc, _ = qrun(media, {"audio": {"required": False}, "review": {"requires_human_signoff": True}})
-    record("Q07 zero-check spec FAILS (no vacuous pass)", rc == 1)
+    # A TRUE zero-check scenario needs a file no default check can fire on:
+    # no audio stream (loudness/true-peak defaults would otherwise run and
+    # fail first - which is exactly how this case used to pass vacuously).
+    silent = tmp / "silent.mp4"
+    sh(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=320x240:r=30:d=2",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", str(silent)])
+    rc, out = qrun(silent, {"audio": {"required": False}, "review": {"requires_human_signoff": True},
+                            "faststart_required": False})
+    record("Q07 zero-check spec FAILS (no vacuous pass)", rc == 1 and "FAIL checks_executed" in out)
     m2997 = tmp / "m2997.mp4"
     sh(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=640x360:r=30000/1001:d=10",
         "-f", "lavfi", "-i", "sine=frequency=440:duration=10", "-shortest",
         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", str(m2997)])
-    rc, _ = qrun(m2997, {"video": {"fps": 30}, "audio": {"required": False}})
-    record("Q05b 29.97 against fps 30 FAILS", rc == 1)
+    rc, out = qrun(m2997, {"video": {"fps": 30}, "audio": {"required": False}})
+    record("Q05b 29.97 against fps 30 FAILS", rc == 1 and "FAIL fps" in out)
     y444 = tmp / "y444.mp4"
     sh(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=320x240:r=30:d=2",
         "-c:v", "libx264", "-pix_fmt", "yuv444p", str(y444)])
-    rc, _ = qrun(y444, {"video": {"pix_fmt": "yuv420p"}, "audio": {"required": False}})
-    record("Q08 yuv444p against yuv420p spec FAILS", rc == 1)
+    rc, out = qrun(y444, {"video": {"pix_fmt": "yuv420p"}, "audio": {"required": False}})
+    record("Q08 yuv444p against yuv420p spec FAILS", rc == 1 and "FAIL pix_fmt" in out)
     # alpha: opaque ProRes must FAIL content, half-alpha must PASS content
     from PIL import Image
     Image.new("RGBA", (160, 90), (255, 0, 0, 255)).save(tmp / "opaque.png")
@@ -187,9 +212,11 @@ def main():
     r = sh(["python3", str(CAPS), str(good), "--fg", "FFFFFF", "--bg", "000000"])
     record("C01 clean SRT with good contrast passes", r.returncode == 0)
     r = sh(["python3", str(CAPS), str(bad)])
-    record("C02 over-long caption line fails", r.returncode == 1)
+    out = r.stdout + r.stderr
+    record("C02 over-long caption line fails", r.returncode == 1 and "chars > 42" in out)
     r = sh(["python3", str(CAPS), str(good), "--fg", "777777", "--bg", "888888"])
-    record("C03 low contrast fails", r.returncode == 1)
+    out = r.stdout + r.stderr
+    record("C03 low contrast fails", r.returncode == 1 and "contrast" in out and "< 4.5:1" in out)
     r = sh(["python3", str(CAPS), str(tmp / "nope.srt")])
     record("C04 caption checker on missing file exits 2", r.returncode == 2)
 
@@ -198,11 +225,14 @@ def main():
     d = base(); d["captions"] = {"mode": "sidecar", "language": "en", "style": "skill-bar", "highlight": "word"}
     record("K01 validator accepts a valid captions block", vrun(d)[0] == 0)
     d = base(); d["captions"] = {"mode": "sidecar", "language": "xx"}
-    record("K02 validator rejects an unknown caption language", vrun(d)[0] == 1)
+    rc, out = vrun(d)
+    record("K02 validator rejects an unknown caption language", rc == 1 and "captions.language must be one of" in out)
     d = base(); d["captions"] = {"mode": "sidecar", "language": "en", "highlight": "letter"}
-    record("K03 validator rejects an unknown highlight mode", vrun(d)[0] == 1)
+    rc, out = vrun(d)
+    record("K03 validator rejects an unknown highlight mode", rc == 1 and "captions.highlight must be one of" in out)
     d = base(); d["captions"] = {"mode": "burned", "language": "en", "style": "skill-bar"}
-    record("K04 render gate requires captions.source for burned mode", vrun(d)[0] == 1)
+    rc, out = vrun(d)
+    record("K04 render gate requires captions.source for burned mode", rc == 1 and "captions.source" in out and "is required" in out)
     d = base(); d["captions"] = {"mode": "sidecar", "language": "ur", "style": "skill-bar"}
     rc, out = vrun(d)
     record("K05 house-style deviation warns but stays VALID", rc == 0 and "house style" in out)
@@ -250,6 +280,72 @@ def main():
            r.returncode == 0 and cj.get("word_highlight") is False
            and all(len(c.get("states", [])) == 1 for c in cj.get("cues", [])))
 
+    # --- v1.5: Phase-0 fixes (F0-1, F0-2, F0-4, F0-5, F0-6) ---
+    ALPHA_SPEC_FILE = SKILL / "templates" / "delivery-spec-alpha-overlay.json"
+    VP9_SPEC_FILE = SKILL / "templates" / "delivery-spec-vp9-alpha-overlay.json"
+    r = sh(["python3", str(QC), str(tmp / "half.mov"), "--spec", str(ALPHA_SPEC_FILE)])
+    out = r.stdout + r.stderr
+    record("N01 F0-1 ProRes master passes its spec without faststart",
+           r.returncode == 0 and "moov_faststart" not in out)
+    rc, out = qrun(media, {"faststart_required": True, "audio": {"required": False}})
+    record("N02 F0-1 web spec still FAILS an mp4 without faststart",
+           rc == 1 and "FAIL moov_faststart" in out)
+    rc, out = qrun(media, {"audio": {"required": False}})
+    record("N03 F0-1 unset policy defaults to required for .mp4",
+           rc == 1 and "FAIL moov_faststart" in out)
+    for name in ("opaque", "half"):
+        sh(["ffmpeg", "-y", "-v", "error", "-loop", "1", "-i", str(tmp / f"{name}.png"),
+            "-t", "1", "-r", "30", "-c:v", "libvpx-vp9", "-pix_fmt", "yuva420p",
+            "-b:v", "200k", "-auto-alt-ref", "0", str(tmp / f"{name}.webm")])
+        sh(["ffmpeg", "-y", "-v", "error", "-loop", "1", "-i", str(tmp / f"{name}.png"),
+            "-t", "1", "-r", "30", "-c:v", "ffv1", "-pix_fmt", "yuva444p16le", str(tmp / f"{name}.mkv")])
+    r = sh(["python3", str(QC), str(tmp / "half.webm"), "--spec", str(VP9_SPEC_FILE)])
+    record("N04 F0-5 VP9 alpha overlay passes the VP9 spec", r.returncode == 0)
+    r = sh(["python3", str(QC), str(tmp / "opaque.webm"), "--spec", str(VP9_SPEC_FILE)])
+    out = r.stdout + r.stderr
+    record("N05 F0-5 opaque VP9 FAILS alpha_content under the VP9 spec",
+           r.returncode == 1 and "FAIL alpha_content" in out)
+    rc, out = qrun(tmp / "opaque.mkv", spec_alpha)
+    record("N06 F0-6 16-bit opaque alpha FAILS on the 65535 scale",
+           rc == 1 and "FAIL alpha_content" in out and "of 65535" in out)
+    rc, out = qrun(tmp / "opaque.webm", spec_alpha)
+    record("N07 F0-6 8-bit opaque alpha FAILS on the 255 scale",
+           rc == 1 and "FAIL alpha_content" in out and "of 255" in out)
+    sf = tmp / "sf"
+    d = base()
+    dp = tmp / "dir.json"; dp.write_text(json.dumps(d))
+    sh(["python3", str(SAMPLER), str(media), str(sf), "--directive", str(dp)])
+    sh(["python3", str(SAMPLER), str(media), str(sf)])
+    stale = [p.name for p in sf.glob("frame_*.png") if "b1" in p.name]
+    record("N08 F0-4 stale frames from an earlier sampler run are removed", stale == [])
+    tpl2 = json.loads(TEMPLATE.read_text())
+    beats = []
+    for i in range(10):
+        b = copy.deepcopy(tpl2["beats"][0])
+        b.update({"id": f"nb{i}", "start": 0.5 + i * 0.9, "end": 1.2 + i * 0.9,
+                  "reveal_sync": [{"element": "x", "time": 0.8 + i * 0.9}]})
+        beats.append(b)
+    tpl2["beats"] = beats
+    dp2 = tmp / "dir10.json"; dp2.write_text(json.dumps(tpl2))
+    sf2 = tmp / "sf2"
+    sh(["python3", str(SAMPLER), str(media), str(sf2), "--directive", str(dp2)])
+    man = json.loads((sf2 / "frames_manifest.json").read_text())
+    record("N09 F0-4 many frames paginate into multiple contact sheets",
+           len(man.get("contact_sheets", [])) == 2 and len(man.get("frames", [])) > 24)
+    sh(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i",
+        "smptehdbars=size=320x180:rate=30:duration=2,setparams=color_primaries=bt2020:color_trc=bt2020-10:colorspace=bt2020nc",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p10le", str(tmp / "wide.mp4")])
+    spec709 = {"video": {"color_space": "bt709", "color_primaries": "bt709", "color_transfer": "bt709"},
+               "audio": {"required": False}, "faststart_required": False}
+    rc, out = qrun(tmp / "wide.mp4", spec709)
+    n10a = rc == 1 and "FAIL color_space" in out
+    sh(["ffmpeg", "-y", "-v", "error", "-i", str(tmp / "wide.mp4"), "-vf",
+        "colorspace=all=bt709:iall=bt2020:itrc=bt2020-10:iprimaries=bt2020:ispace=bt2020nc",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", str(tmp / "wide_conv.mp4")])
+    rc, out = qrun(tmp / "wide_conv.mp4", spec709)
+    record("N10 F0-2 wide-gamut source FAILS bt709 spec; converted pixels PASS",
+           n10a and rc == 0 and "PASS color_space" in out)
+
     # --- v1.3: transcription ---
     try:
         import faster_whisper  # noqa: F401
@@ -261,11 +357,15 @@ def main():
         ok = r.returncode == 0 and (tmp / "tr.json").exists() and "segments" in json.loads((tmp / "tr.json").read_text())
         record("R01 transcribe.py writes a valid transcript JSON", ok)
     else:
-        record("R01 transcribe.py writes a valid transcript JSON", True,
-               "skipped: faster-whisper not installed for this python")
+        record_skip("R01 transcribe.py writes a valid transcript JSON",
+                    "faster-whisper not installed for this python")
 
-    failed = [n for n, ok, _ in RESULTS if not ok]
-    print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} passed")
+    failed = [n for n, ok, _ in RESULTS if ok is False]
+    skipped = [n for n, ok, _ in RESULTS if ok is None]
+    passed = sum(1 for _, ok, _ in RESULTS if ok is True)
+    print(f"\n{passed}/{len(RESULTS)} passed" + (f", {len(skipped)} skipped" if skipped else ""))
+    if skipped:
+        print("skipped:", "; ".join(skipped))
     if failed:
         print("failed:", "; ".join(failed))
     return 1 if failed else 0

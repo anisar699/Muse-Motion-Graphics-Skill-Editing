@@ -7,6 +7,12 @@ ffmpeg -i footage.mp4 -framerate <src_fps> -itsoffset 2.0 -i frames/frame_%04d.p
 
 Never time a PNG sequence with overlay's enable='between(t,...)': enable only hides the overlay while the sequence keeps consuming frames from t=0, so the entrance animation is skipped and the last frame freezes on screen. Delay the sequence itself with -itsoffset (or setpts) so frame 0 lands on the beat start. Match -framerate to the source frame rate, never a hard-coded 30.
 
+Non-BT.709 sources (v1.5, F0-2): read the source colour tags at intake (ffprobe color_space / color_transfer / color_primaries). Three cases, no fourth:
+- BT.709 SDR: proceed normally.
+- BT.2020 SDR (transfer bt2020-10 / bt2020-12): CONVERT the pixels with the colorspace filter, then tag from the conversion: ffmpeg -i src.mp4 -vf "colorspace=all=bt709:iall=bt2020:itrc=bt2020-10:iprimaries=bt2020:ispace=bt2020nc" -c:v libx264 -pix_fmt yuv420p out.mp4 (use itrc=bt2020-12 for 12-bit sources). Verified live: output probes fully bt709 and the frame statistics actually change.
+- PQ (smpte2084) or HLG (arib-std-b67) HDR: this toolchain has NO honest conversion path (no zscale, no libplacebo, and the colorspace filter build lacks smpte2084 input). STOP and report the source as unsupported for SDR delivery; do not ship an approximation silently.
+NEVER fix colour tags alone: setparams/setmetadata relabeling changes no pixel. Measured proof: a relabel-only file passes the bt709 tag checks with frame statistics identical to the wide-gamut source (YAVG 103.5 vs 103.2 normalised), while a real conversion measurably remaps the picture (98.4). A green tag check after relabeling is a false PASS.
+
 Caption overlay layer (v1.4): scripts/build_captions.py writes a layer.ffconcat (gap PNG + one PNG state per spoken word for the highlight). Burn it over the source like any graphics layer:
 ffmpeg -i footage.mp4 -f concat -safe 0 -i captions/layer.ffconcat -filter_complex "[0:v][1:v]overlay=0:0:format=auto:eof_action=pass,format=yuv420p[out]" -map "[out]" -map "0:a?" -c:v libx264 -profile:v high -crf 18 -c:a copy out.mp4
 Run the concat input from the captions folder (paths inside the file are relative to it), and keep the source frame rate: concat PNG layers play at the input rate, so add -framerate <src_fps> before the concat input when the source is not 25 fps.
