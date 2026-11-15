@@ -1,5 +1,15 @@
 # Muse Motion Changelog
 
+## v1.6 - 2026-11-15
+
+Owner audit of the ISS documentary edit (the first full-length landscape delivery): the owner found fact cards parked directly above the caption band, and the self-audit found broken caption phrasing. All findings were reproduced before fixing; the fixes are in the engine and the validator, not just in that one video.
+
+- Caption cue-group repairs in build_captions.py (owner audit: a one-word cue "routine." flashed for 0.7s, "space." likewise, and phrases split as "for the night / side" and "A city in / space."). Grouping now (a) swallows one short trailing word past the char budget when it completes a phrase - never across a sentence end, so a new sentence's first word is never swallowed; (b) merges orphan tail groups (a single word, or a group at or below 29 percent of the cue budget) into the previous group; (c) shifts a trailing function word (the, in, of, ...) into the next group so a cue does not end mid-phrase. The orphan threshold and merge cap are relative to --max-chars (2x budget = two rendered lines): the new K12 case exposed that an absolute 12-char threshold collapsed every group into one cue at --max-chars 20 - fixed before release, with the shipped ISS captions byte-identical before and after (SRT diff empty at the default budget).
+- Rendered lines now respect the per-line character cap as well as the measured width, and two-line cues are length-balanced, so a repaired cue never renders as a full line over a stub ("...for the night" / "side" now renders "Giant batteries store / energy for the night side").
+- Caption-zone placement rule (owner, from her own screenshot comparison): with burned/both captions, heading and fact cards belong in the top zone like a title card, never parked in the bottom zone above the caption band. validate_directive.py warns PLACEMENT when a beat layout's bottom edge enters the bottom 26 percent of the frame while captions are burned/both; the rule is documented in references/workflow-and-directive.md and SKILL.md. On the audited directive the warning fired for all 8 fact cards; after moving them to the top zone it fires zero times.
+- Proof on the real delivery: the ISS documentary was re-edited end to end (cards top, captions rebuilt 84 -> 79 cues with every flagged phrase whole, BBC logo at 110.4-120.6s and "Part X" corner text at 20.4-30.6s delogo-covered after dense corner sampling, end card hold extended, loudness compensated to land at -14.29 LUFS / -1.27 dBTP, QC PASS).
+- Tests: 6 new cases (K12-K17) cover the orphan merge, the function-word shift, the compound swallow, the sentence guard, and the PLACEMENT warning both ways; the suite is 64 cases, all passing, and the v1.0 auditors' suite still passes 18 of 18. skill.yaml and SKILL.md synchronised at version 1.6.
+
 ## v1.5 - 2026-11-15
 
 The six Phase-0 items from the v2.0 feature review, each verified live on v1.4 before fixing (four confirmed defects, one confirmed test-suite pattern, one not reproduced behaviorally). Only the confirmed scope was fixed.

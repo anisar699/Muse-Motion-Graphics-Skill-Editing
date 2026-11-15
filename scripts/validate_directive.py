@@ -286,6 +286,24 @@ def validate(data, draft, directive_dir):
                     if not cpath.is_file():
                         E("CAPTIONS", f"captions.source not found: {csrc}")
 
+    # ---- caption-zone placement (v1.6, owner rule 2026-11-15) ----
+    # With burned/both captions, heading and fact cards parked in the
+    # bottom zone crowd the caption band and read as part of it; they
+    # belong in the top zone, the way a title card sits. Warning only -
+    # a deliberate lower-third design can still be approved knowingly.
+    if isinstance(caps, dict) and caps.get("mode") in {"burned", "both"}:
+        fmt_h = (data.get("format") or {}).get("height")
+        if isinstance(fmt_h, (int, float)) and fmt_h > 0:
+            zone_top = fmt_h - round(0.26 * fmt_h)
+            for b in data.get("beats") or []:
+                if not isinstance(b, dict):
+                    continue
+                lay = b.get("layout") or {}
+                y, h = lay.get("y"), lay.get("height")
+                if isinstance(y, (int, float)) and isinstance(h, (int, float)) \
+                        and y + h > zone_top:
+                    W("PLACEMENT", f"beat {b.get('id')!r}: layout bottom {y + h:.0f} enters the caption zone (bottom 26% of frame, from y={zone_top}) while captions are {caps.get('mode')} - heading/fact cards belong in the top zone, clear of the caption band (owner rule 2026-11-15)")
+
     # ---- protected regions ----
     protected = data.get("protected_regions") or []
     if not isinstance(protected, list):

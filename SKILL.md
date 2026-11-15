@@ -5,7 +5,7 @@ description: Professional motion graphics video editing for user-supplied videos
 
 # Muse Motion
 
-Version 1.5 (2026-11-15). Changes from 1.0 are listed in CHANGELOG.md.
+Version 1.6 (2026-11-15). Changes from 1.0 are listed in CHANGELOG.md.
 
 ## Purpose and route selection
 
@@ -124,6 +124,10 @@ Version 1.5 (2026-11-15). Changes from 1.0 are listed in CHANGELOG.md.
 - House styles are locked (owner decision 2026-11-15): English and Roman Urdu use the `skill-bar` (charcoal bar, white bold text, amber underline); Urdu script uses the `nastaliq-bar` (same bar, bundled Noto Nastaliq Urdu, RTL). Both bars include word-by-word highlighting: the word being spoken turns amber inside the bar (one PNG state per word). A directive declares captions in its `captions` block (mode none|sidecar|burned|both, language en|ur|roman, style, highlight word|none, source = the captions.json to burn); deviating from the house style warns, and burned mode at the approval gate requires an existing captions source.
 
 - Build captions with scripts/build_captions.py from a word-timestamped transcript (scripts/transcribe.py output). It writes captions.json, captions.srt, and an ffmpeg concat overlay layer (layer.ffconcat) that is overlaid on the source exactly like a graphics layer, so captions can never collide with protected regions by accident and stay in sync with the directive's canvas. Cue timing is reading-time based (block-proportional tiling at <=20 cps); cues that genuinely cannot fit because the speech itself is faster are declared as over-speed bursts in captions.json, never silently hidden.
+
+- Cue grouping repairs broken phrases before tiling (v1.6, owner audit 2026-11-15): a short trailing word that completes a phrase is swallowed into its cue instead of split off ("night side"), one-word tail cues are merged into the previous cue instead of flashing ("routine."), a cue never ends on a function word when the phrase continues ("A city in / space."), and two-line cues are length-balanced. A new sentence's first word is never swallowed across a sentence end. Rendered lines respect the per-line character cap as well as the measured width.
+
+- Heading and fact cards sit in the top zone when captions are burned (caption-zone placement rule - see references/workflow-and-directive.md); the validator warns PLACEMENT when a card layout enters the bottom 26 percent of the frame.
 
 - Language honesty is enforced by the tool: an English transcript yields English captions; an Urdu transcript yields Urdu script and Roman Urdu (transliterated via references/roman-urdu-dictionary.json, with the dictionary coverage percentage reported - extend the dictionary when coverage drops). English-to-Urdu or English-to-Roman is translation, not transcription: the tool refuses it unless a human supplies or approves the translated text.
 

@@ -24,6 +24,8 @@ A styleframe is a still finished to final render quality. Three to six frames sh
 
 Safe areas for 16 to 9 are action safe 93 percent and title safe 90 percent under SMPTE ST 2046-1 and EBU R 95. At 1920 by 1080 title safe is 1728 by 972 with margins of 96 px left and right and 54 px top and bottom. Social vertical safe zones are stricter and override broadcast safe areas for those deliverables.
 
+Caption-zone placement (owner rule, 2026-11-15): when a deliverable carries burned or sidecar-plus-burned captions, heading and fact cards sit in the TOP zone of the frame, the way a title card sits - never parked in the bottom zone directly above the caption band, where they crowd the captions and read as part of them. The validator warns (PLACEMENT) when a beat layout's bottom edge enters the bottom 26 percent of the frame while captions are burned/both. Centred treatments (selective text, end cards) are unaffected. A deliberate lower-third design remains possible, but it is an explicit, approved exception, not a default.
+
 ## Animatic
 
 Cut storyboard panels to the recorded or scratch voice at real duration with temp music and effects. The agent shortcut that preserves the gate is rendering the actual Remotion composition with styleframe stills, final timing and scratch audio at low resolution as a timing render, and getting approval on that file.

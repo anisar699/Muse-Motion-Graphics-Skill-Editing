@@ -280,6 +280,55 @@ def main():
            r.returncode == 0 and cj.get("word_highlight") is False
            and all(len(c.get("states", [])) == 1 for c in cj.get("cues", [])))
 
+    # --- v1.6: cue-group repairs (user audit 2026-11-15) ---
+    def cap_texts(tr_path, out_name, dur, *extra):
+        out_d = tmp / out_name
+        r = sh([sys.executable, str(BUILD_CAPS), str(tr_path), "--lang", "en",
+                "--out-dir", str(out_d), "--duration", str(dur), *extra])
+        if r.returncode != 0 or not (out_d / "captions.json").exists():
+            return None
+        cj2 = json.loads((out_d / "captions.json").read_text())
+        return [" ".join(c.get("lines", [])) for c in cj2.get("cues", [])]
+    orph = tmp / "orph.json"
+    orph.write_text(json.dumps(words_json("en", [(w, i * 0.3, i * 0.3 + 0.28) for i, w in enumerate(
+        ["aaaaa", "bbbbb", "ccccc", "ddddd", "eeeee", "fffff", "gggggggg."])])))
+    texts = cap_texts(orph, "caps_orph", 3.0, "--max-chars", "20")
+    record("K12 orphan tail word merges into the previous cue",
+           texts is not None and len(texts) == 2 and "gggggggg." in texts[-1]
+           and all(len(t.split()) > 1 for t in texts))
+    shift = tmp / "shift.json"
+    shift.write_text(json.dumps(words_json("en", [(w, i * 0.35, i * 0.35 + 0.32) for i, w in enumerate(
+        ["Silent", "majestic", "station", "drifting", "in", "silence", "we",
+         "watched", "the", "world", "turn", "below."])])))
+    texts = cap_texts(shift, "caps_shift", 5.0)
+    record("K13 group ending on a function word shifts it forward",
+           texts is not None and any(t.startswith("in silence") for t in texts)
+           and not any(t.endswith(" in") for t in texts))
+    swal = tmp / "swal.json"
+    swal.write_text(json.dumps(words_json("en", [(w, i * 0.35, i * 0.35 + 0.32) for i, w in enumerate(
+        ["Giant", "batteries", "store", "energy", "for", "the", "night", "side",
+         "effects", "linger", "here", "today."])])))
+    texts = cap_texts(swal, "caps_swal", 5.0)
+    record("K14 short compound word is swallowed, not split off",
+           texts is not None and any("night side" in t for t in texts))
+    guard = tmp / "guard.json"
+    guard.write_text(json.dumps(words_json("en", [(w, i * 0.35, i * 0.35 + 0.32) for i, w in enumerate(
+        ["The", "old", "silent", "station", "drifting", "and", "waits.",
+         "A", "city", "sleeps."])])))
+    texts = cap_texts(guard, "caps_guard", 5.0)
+    record("K15 a new sentence's first word is never swallowed",
+           texts is not None and len(texts) == 2 and texts[1].startswith("A city")
+           and not any("waits. A" in t for t in texts))
+    d = base(); d["captions"] = {"mode": "burned", "language": "en", "style": "skill-bar", "highlight": "word"}
+    d["beats"][0]["layout"] = {"x": 20, "y": 250, "width": 200, "height": 80}
+    rc, out = vrun(d, "--draft")
+    record("K16 card parked in the caption zone warns (owner rule)",
+           rc == 0 and "caption zone" in out and "PLACEMENT" in out)
+    d["beats"][0]["layout"] = {"x": 20, "y": 20, "width": 200, "height": 80}
+    rc, out = vrun(d, "--draft")
+    record("K17 top-zone card does not warn",
+           rc == 0 and "caption zone" not in out)
+
     # --- v1.5: Phase-0 fixes (F0-1, F0-2, F0-4, F0-5, F0-6) ---
     ALPHA_SPEC_FILE = SKILL / "templates" / "delivery-spec-alpha-overlay.json"
     VP9_SPEC_FILE = SKILL / "templates" / "delivery-spec-vp9-alpha-overlay.json"

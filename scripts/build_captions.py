@@ -111,17 +111,67 @@ def build_cues(words, max_chars, max_cps, max_dur=6.5, gap_break=0.6):
 
     norm, bursts = [], []
     for bi, block in enumerate(blocks):
-        # 2) cue groups inside the block
+        # 2) cue groups inside the block. A group may swallow one short
+        # trailing word past the char budget (lookahead): short words bind
+        # tightly to what precedes them ("night side"), and splitting them
+        # off is the classic broken-caption look. Never swallow across a
+        # sentence end - a capital that starts a new sentence stays put.
         groups, g = [], []
+        swallowed = False
         for w in block:
             if g:
                 chars = sum(len(x["text"]) for x in g) + len(g) - 1 + 1 + len(w["text"])
-                if chars > max_chars or w["end"] - g[0]["start"] > max_dur:
+                over = chars > max_chars or w["end"] - g[0]["start"] > max_dur
+                if over and not swallowed and len(w["text"]) <= 5 \
+                        and chars <= max_chars + 6 \
+                        and not g[-1]["text"].rstrip().endswith((".", "!", "?")) \
+                        and w["end"] - g[0]["start"] <= max_dur:
+                    over = False
+                    swallowed = True
+                if over:
                     groups.append(g)
                     g = []
+                    swallowed = False
             g.append(w)
         if g:
             groups.append(g)
+        # 2b) group repairs (user audit 2026-11-15): a one-word tail group
+        # flashes on screen ("routine."), and a group ending on a function
+        # word splits a phrase ("A city in / space."). Merge orphans into
+        # the previous group (two rendered lines allow up to 2x the char
+        # budget) and shift trailing function words forward. Repeat until
+        # stable. The orphan threshold is relative to the cue budget -
+        # an absolute 12 chars misfires at small --max-chars values.
+        def glen(gr):
+            return sum(len(x["text"]) for x in gr) + len(gr) - 1
+        orphan_max = max(6, round(0.29 * max_chars))
+        merge_cap = 2 * max_chars
+        FUNC = {"the", "a", "an", "in", "on", "of", "to", "for", "with",
+                "by", "from", "at", "and", "or", "but", "as", "into",
+                "over", "under", "between", "through", "during", "before",
+                "after", "per", "via"}
+        for _ in range(8):
+            changed = False
+            for i in range(1, len(groups)):
+                if (len(groups[i]) == 1 or glen(groups[i]) <= orphan_max) \
+                        and glen(groups[i - 1]) + 1 + glen(groups[i]) <= merge_cap:
+                    groups[i - 1] = groups[i - 1] + groups[i]
+                    del groups[i]
+                    changed = True
+                    break
+            if changed:
+                continue
+            for i in range(len(groups) - 1):
+                g = groups[i]
+                if len(g) > 1 and \
+                        g[-1]["text"].strip(".,!?").lower() in FUNC and \
+                        glen(groups[i + 1]) + 1 + len(g[-1]["text"]) <= merge_cap:
+                    groups[i + 1] = [g[-1]] + groups[i + 1]
+                    groups[i] = g[:-1]
+                    changed = True
+                    break
+            if not changed:
+                break
         # 3) block window
         b_start = block[0]["start"]
         if bi > 0:
@@ -255,12 +305,17 @@ def main():
                             language="ur" if rtl else "en")
         return bb[2] - bb[0]
 
+    line_char_cap = args.max_chars or DEFAULT_MAX_CHARS[args.lang]
+
     def wrap_idx(cue_words):
-        """Greedy wrap by measured width; returns lines as lists of word indices."""
+        """Greedy wrap by measured width AND the per-line character cap
+        (a cue repaired for phrase integrity may hold two lines of text;
+        each rendered line must still respect the cap). Returns lines as
+        lists of word indices."""
         lines, cur = [], []
         for wi, w in enumerate(cue_words):
             cand = " ".join(cue_words[j]["text"] for j in cur + [wi])
-            if cur and text_w(cand) > max_line_w:
+            if cur and (text_w(cand) > max_line_w or len(cand) > line_char_cap):
                 lines.append(cur)
                 cur = [wi]
             else:
@@ -269,6 +324,25 @@ def main():
             lines.append(cur)
         if len(lines) > 2:
             lines = [lines[0], [j for ln in lines[1:] for j in ln]]
+        if len(lines) == 2:
+            # balance the pair: a full first line over a stub second line
+            # ("...for the night" / "side") reads as a split phrase even
+            # inside one cue. Move words down while both lines stay within
+            # caps and the length imbalance shrinks.
+            def llen(idxs):
+                return len(" ".join(cue_words[j]["text"] for j in idxs))
+            while len(lines[0]) > 1:
+                cand0 = lines[0][:-1]
+                cand1 = [lines[0][-1]] + lines[1]
+                t0 = " ".join(cue_words[j]["text"] for j in cand0)
+                t1 = " ".join(cue_words[j]["text"] for j in cand1)
+                if len(t0) > line_char_cap or len(t1) > line_char_cap:
+                    break
+                if text_w(t0) > max_line_w or text_w(t1) > max_line_w:
+                    break
+                if abs(len(t0) - len(t1)) >= abs(llen(lines[0]) - llen(lines[1])):
+                    break
+                lines = [cand0, cand1]
         return lines
 
     space_w = text_w(" ")
