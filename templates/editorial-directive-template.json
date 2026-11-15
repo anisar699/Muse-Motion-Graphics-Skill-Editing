@@ -1,0 +1,57 @@
+{
+ "version": 1,
+ "project": "example-project",
+ "theme": "default",
+ "format": {
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "aspect": "16:9"
+ },
+ "source": {
+  "path": "/absolute/path/to/source.mp4",
+  "duration_s": 60.0
+ },
+ "approval": {
+  "status": "pending",
+  "ambiguities": []
+ },
+ "protected_regions": [
+  {
+   "name": "presenter-face",
+   "x": 1200,
+   "y": 80,
+   "width": 520,
+   "height": 520
+  }
+ ],
+ "beats": [
+  {
+   "id": "beat-01",
+   "start": 0.0,
+   "end": 3.0,
+   "spoken_text": "Hook line here",
+   "role": "hook",
+   "treatment": "SELECTIVE_TEXT",
+   "on_screen_copy": [
+    "HOOK TEXT"
+   ],
+   "layout": {
+    "x": 96,
+    "y": 700,
+    "width": 900,
+    "height": 220
+   },
+   "reveal_sync": [
+    {
+     "element": "HOOK TEXT",
+     "time": 0.4
+    }
+   ],
+   "transition_in": "spring-pop",
+   "transition_out": "fade-up",
+   "rationale": "Hook needs text plus presenter"
+  }
+ ],
+ "notes": "Draft template: validate with --draft while designing. Before rendering, set approval.status to approved, point source.path at the real media file, and run the validator without --draft. transition_in and transition_out must use tokens from the fixed set in references/workflow-and-directive.md."
+}
