@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Muse Motion shipped regression suite (v1.2).
+"""Muse Motion shipped regression suite (v1.3).
 
 Self-contained: needs python3, ffmpeg, ffprobe and Pillow. Run directly:
   python3 tests/test_muse_motion_regression.py
-Exits 0 when every case matches the v1.2 contract, 1 otherwise.
+Exits 0 when every case matches the v1.3 contract, 1 otherwise.
 Cases are seeded from the v1.0 auditors' 18-case suite and the v1.1 audit's
 reproduction index (section 6), re-expressed against the v1.2 contract.
 """
@@ -18,6 +18,9 @@ SKILL = pathlib.Path(__file__).resolve().parent.parent
 VALIDATOR = SKILL / "scripts" / "validate_directive.py"
 QC = SKILL / "scripts" / "qc_probe.py"
 SAMPLER = SKILL / "scripts" / "sample_frames.py"
+PEAK = SKILL / "scripts" / "peak_guard.py"
+CAPS = SKILL / "scripts" / "check_captions.py"
+TRANSCRIBE = SKILL / "scripts" / "transcribe.py"
 TEMPLATE = SKILL / "templates" / "editorial-directive-template.json"
 
 RESULTS = []
@@ -159,6 +162,50 @@ def main():
     r = sh(["python3", str(SAMPLER), str(tmp / "d.json"), str(tmp / "sf")])
     record("S03 sampler on non-media exits 2 without traceback",
            r.returncode == 2 and "Traceback" not in (r.stdout + r.stderr))
+
+    # --- v1.3: peak guard ---
+    r = sh(["python3", str(PEAK), str(media), "--report", str(tmp / "pg1.json")])
+    pg = json.loads((tmp / "pg1.json").read_text()) if (tmp / "pg1.json").exists() else {}
+    record("P01 quiet file passes peak guard unchanged",
+           r.returncode == 0 and pg.get("status") == "pass_already_within_ceiling")
+    hot = tmp / "hot.mp4"
+    sh(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=320x240:r=30:d=3",
+        "-f", "lavfi", "-i", "aevalsrc=sin(2*PI*440*t):d=3", "-shortest",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", str(hot)])
+    r = sh(["python3", str(PEAK), str(hot), "--report", str(tmp / "pg2.json")])
+    pg = json.loads((tmp / "pg2.json").read_text()) if (tmp / "pg2.json").exists() else {}
+    record("P02 hot file is fixed to below the ceiling",
+           r.returncode == 0 and pg.get("status") == "fixed" and pg.get("tp_after", 0) <= -1.0)
+    r = sh(["python3", str(PEAK), str(tmp / "nope.mp4")])
+    record("P03 peak guard on missing file exits 2", r.returncode == 2)
+
+    # --- v1.3: caption checker ---
+    good = tmp / "good.srt"
+    good.write_text("1\n00:00:01,000 --> 00:00:03,500\nA perfectly fine caption line\n")
+    bad = tmp / "bad.srt"
+    bad.write_text("1\n00:00:01,000 --> 00:00:02,600\nThis line is deliberately made far too long for the limit\n")
+    r = sh(["python3", str(CAPS), str(good), "--fg", "FFFFFF", "--bg", "000000"])
+    record("C01 clean SRT with good contrast passes", r.returncode == 0)
+    r = sh(["python3", str(CAPS), str(bad)])
+    record("C02 over-long caption line fails", r.returncode == 1)
+    r = sh(["python3", str(CAPS), str(good), "--fg", "777777", "--bg", "888888"])
+    record("C03 low contrast fails", r.returncode == 1)
+    r = sh(["python3", str(CAPS), str(tmp / "nope.srt")])
+    record("C04 caption checker on missing file exits 2", r.returncode == 2)
+
+    # --- v1.3: transcription ---
+    try:
+        import faster_whisper  # noqa: F401
+        have_fw = True
+    except ImportError:
+        have_fw = False
+    if have_fw:
+        r = sh([sys.executable, str(TRANSCRIBE), str(media), "--out", str(tmp / "tr.json")])
+        ok = r.returncode == 0 and (tmp / "tr.json").exists() and "segments" in json.loads((tmp / "tr.json").read_text())
+        record("R01 transcribe.py writes a valid transcript JSON", ok)
+    else:
+        record("R01 transcribe.py writes a valid transcript JSON", True,
+               "skipped: faster-whisper not installed for this python")
 
     failed = [n for n, ok, _ in RESULTS if not ok]
     print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} passed")

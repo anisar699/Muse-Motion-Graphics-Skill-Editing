@@ -5,7 +5,7 @@ description: Professional motion graphics video editing for user-supplied videos
 
 # Muse Motion
 
-Version 1.2 (2026-11-15). Changes from 1.0 are listed in CHANGELOG.md.
+Version 1.3 (2026-11-15). Changes from 1.0 are listed in CHANGELOG.md.
 
 ## Purpose and route selection
 
@@ -125,9 +125,9 @@ Version 1.2 (2026-11-15). Changes from 1.0 are listed in CHANGELOG.md.
 
 - Check safe areas with an overlay. Keep 16 to 9 text inside the 90 percent title safe area, and keep vertical critical content out of the top platform band, the bottom caption band, and the right action rail.
 
-- Check captions by ear and eye. Confirm names, numbers, and low confidence words, keep standard captions at or below 42 characters per line and 2 lines, and keep reading speed at or below 20 characters per second for adults.
+- Check captions by ear and eye. Confirm names, numbers, and low confidence words, keep standard captions at or below 42 characters per line and 2 lines, and keep reading speed at or below 20 characters per second for adults. Run scripts/check_captions.py on the SRT to automate the form checks (line length, reading speed, cue duration, overlaps, and WCAG contrast when style colours are given); wording stays a human judgement. For speech sources, scripts/transcribe.py produces the word-timestamped transcript locally (faster-whisper, PCM route) that captions and beats are timed from.
 
-- Measure loudness and true peak on the final encoded file, not on the project. Run scripts/qc_probe.py on the final file with a per-deliverable --spec file and save the --report JSON: it enforces audio presence (missing audio fails as AUDIO_STREAM_MISSING, digital silence fails as AUDIO_SILENT), loudness target and tolerance, true peak ceiling, dimensions, frame rate (0.01 tolerance, VFR detected), codec, pixel format, profile, colour tags, duration, alpha when required (format AND decoded content - a constant-opaque alpha fails), and front placed moov atom for MP4/MOV, and it exits nonzero on any failure; spec keys are whitelisted, and starter specs live in templates/. Use scripts/sample_frames.py to extract hook, quarter, hero, three-quarter and end frames plus a contact sheet for the human visual check (with --directive it also samples every beat start, reveal and end).
+- Measure loudness and true peak on the final encoded file, not on the project. First run scripts/peak_guard.py on the encoded file: the AAC encode can overshoot loudnorm's true-peak ceiling (measured -0.95 and -0.7 dBTP against a -1.0 ceiling on real deliveries), and the guard applies the smallest sufficient gain reduction as an audio-only remux and re-measures. Then run scripts/qc_probe.py on the final file with a per-deliverable --spec file and save the --report JSON: it enforces audio presence (missing audio fails as AUDIO_STREAM_MISSING, digital silence fails as AUDIO_SILENT), loudness target and tolerance, true peak ceiling, dimensions, frame rate (0.01 tolerance, VFR detected), codec, pixel format, profile, colour tags, duration, alpha when required (format AND decoded content - a constant-opaque alpha fails), and front placed moov atom for MP4/MOV, and it exits nonzero on any failure; spec keys are whitelisted, and starter specs live in templates/. Use scripts/sample_frames.py to extract hook, quarter, hero, three-quarter and end frames plus a contact sheet for the human visual check (with --directive it also samples every beat start, reveal and end).
 
 - Apply the accessibility hard limits. Keep contrast at or above 4.5 to 1 for normal text and 3 to 1 for large text, and never flash more than 3 times in any 1 second period.
 

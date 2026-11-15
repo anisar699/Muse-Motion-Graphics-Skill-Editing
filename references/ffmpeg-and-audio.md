@@ -27,6 +27,8 @@ All measurement follows ITU-R BS.1770 with K weighting and gating, and LUFS equa
 
 Always use two pass loudnorm for deliverables. Single pass uses dynamic processing that estimates as it goes and can pump or alter the mix. Two pass with linear true applies one static gain from the full programme measurement, leaving dynamics and timing untouched. Linear falls back to dynamic if measured values are missing or gain would push peaks over the true peak ceiling.
 
+One gap remains: loudnorm promises the ceiling on the PCM it measures, but the delivery encode (AAC in MP4) can overshoot it - on real v1.1/v1.2 deliveries the encoded file measured -0.95 and -0.7 dBTP against a -1.0 ceiling and failed QC. Close the loop with scripts/peak_guard.py (v1.3): it measures the encoded file, and when the peak is over the ceiling it applies the smallest sufficient gain reduction as an audio-only remux (video stream-copied, never re-encoded), re-measures, and reports before/after values. Run it before qc_probe.py on every deliverable.
+
 Pass one measures with no file written and JSON printed:
 ffmpeg -i mix.wav -af "loudnorm=I=-14:TP=-1:LRA=11:print_format=json" -f null -
 

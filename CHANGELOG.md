@@ -1,5 +1,16 @@
 # Muse Motion Changelog
 
+## v1.3 - 2026-11-15
+
+Three workflow features added at the owner's request, each closing a gap that cost real time on the v1.1/v1.2 deliveries. The shipped regression suite grows to 36 cases (all passing); the v1.0 auditors' 18-case suite still passes 18 of 18.
+
+- New scripts/peak_guard.py: measures the ENCODED file's true peak and, when it sits above the ceiling (default -1.0 dBTP), applies the smallest sufficient gain reduction as an audio-only remux (video stream-copied, never re-encoded) and re-measures. Why: loudnorm's linear pass promises the ceiling on PCM, but the AAC encode overshot it on three consecutive real deliveries (-0.95, -0.95 and -0.7 dBTP), each needing a manual fix pass. The guard reports before/after values and exits 0 (already within ceiling, or fixed), 1 (still above) or 2 (tool error). The QC contract now runs the guard before qc_probe.py.
+- New scripts/transcribe.py: the transcription step is built into the skill. Local faster-whisper with word timestamps, writing the transcript JSON the directive design consumes. Audio is decoded to 16 kHz mono PCM with ffmpeg and fed to Whisper as a numpy array, sidestepping a PyAV build bug (av.open rejects the metadata_errors keyword) hit twice in production.
+- New scripts/check_captions.py: the automatable part of AUD-27. Validates an SRT for line length (42), reading speed (20 cps), cue duration (warns under 0.8s / over 7s), timing overlaps (errors) and near-zero gaps, and WCAG contrast (at least 4.5 to 1) when the caption style colours are given. Caption wording and flash-rate judgement stay human, and the docs say so.
+- Docs updated: workflow (transcription route), export/QC checklist (peak guard step, caption automation), ffmpeg reference (the AAC-overshoot explanation), SKILL.md and skill.yaml synchronised at version 1.3. requirements.txt now lists numpy explicitly (transcribe.py imports it directly).
+
+Still open, deliberately: visual regression against approved edits, a bundled Remotion sample project, and multi-source timelines (AUD-23) - proposed for a later version, not silently dropped.
+
 ## v1.2 - 2026-11-15
 
 Fixes from a third independent developer audit, this time of v1.1 (27 findings, AUD-01 to AUD-27). Every reproduced case was re-run against v1.1 before fixing; the package now ships its own regression suite (tests/test_muse_motion_regression.py, 28 cases, all passing) and the v1.0 auditors' 18-case suite still passes 18 of 18.

@@ -10,6 +10,8 @@ Use a written brief naming audience, single message, platforms and aspects, dura
 
 The first production artefact for any speech video is a word timestamped transcript. It drives caption pages, kinetic type hits, cut points on phrase boundaries, B roll and callout placement, and the animatic. Cut pauses above about 0.3 seconds in short form as a practitioner retention heuristic. For music, build a beat grid of BPM and downbeats in the same timeline JSON. Everything downstream consumes word objects with text, startMs and endMs plus beat and scene markers. Never hand type timings.
 
+Built-in route (v1.3): scripts/transcribe.py transcribes locally with faster-whisper and writes the transcript JSON (segments with word timestamps) the directive design consumes. It decodes the audio to 16 kHz mono PCM with ffmpeg and feeds Whisper a numpy array, which sidesteps a PyAV build bug (av.open rejects the metadata_errors keyword) seen on some installations. Nothing is uploaded.
+
 ## Script and storyboard
 
 A timed script must fit duration at about 130 to 160 spoken words per minute for comfortable narration. The storyboard has one panel per shot or scene tied to a script line with transition and graphic notes. In code the storyboard is the composition outline, so the scene list becomes the Sequence list with from and durationInFrames.
